@@ -1,0 +1,102 @@
+# Project-specific Semgrep rules: they encode Imali's security guarantees so a future
+# change can't quietly break them. Run with: npm run security
+
+rules:
+  - id: imali-no-html-sinks
+    message: >-
+      HTML string sinks are banned (Trusted Types will throw at runtime anyway). Build DOM with
+      h() from js/dom.js, which only inserts text nodes.
+    severity: ERROR
+    languages: [javascript]
+    paths: { include: ['/js/', '/sw.js'] }
+    pattern-either:
+      - pattern: $EL.innerHTML = $X
+      - pattern: $EL.outerHTML = $X
+      - pattern: $EL.insertAdjacentHTML(...)
+      - pattern: document.write(...)
+      - pattern: document.writeln(...)
+      - pattern: $R.createContextualFragment(...)
+      - pattern: new DOMParser().parseFromString(...)
+
+  - id: imali-no-dynamic-code
+    message: Dynamic code execution is banned (and blocked by the CSP).
+    severity: ERROR
+    languages: [javascript]
+    paths: { include: ['/js/', '/sw.js'] }
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+      - pattern: setTimeout("...", ...)
+      - pattern: setInterval("...", ...)
+      - pattern: import($X)
+
+  - id: imali-no-network-calls
+    message: >-
+      The app must never send data anywhere: all user data stays on the device. Only the
+      service worker may fetch, and only its own files.
+    severity: ERROR
+    languages: [javascript]
+    paths: { include: ['/js/'] }
+    pattern-either:
+      - pattern: fetch(...)
+      - pattern: new XMLHttpRequest()
+      - pattern: new WebSocket(...)
+      - pattern: new EventSource(...)
+      - pattern: navigator.sendBeacon(...)
+
+  - id: imali-storage-only-via-vault
+    message: >-
+      Browser storage is plaintext. User data must go through js/vault.js (encrypted IndexedDB);
+      only non-sensitive display preferences may use localStorage (js/prefs.js).
+    severity: ERROR
+    languages: [javascript]
+    paths:
+      include: ['/js/']
+      exclude: ['/js/prefs.js', '/js/idb.js']
+    pattern-either:
+      - pattern: localStorage.$M(...)
+      - pattern: sessionStorage.$M(...)
+      - pattern: indexedDB.open(...)
+      - pattern: document.cookie = $X
+      - pattern: caches.open(...)
+
+  - id: imali-no-math-random
+    message: Math.random() is not cryptographically secure. Use crypto.getRandomValues() or crypto.randomUUID().
+    severity: ERROR
+    languages: [javascript]
+    paths: { include: ['/js/'] }
+    pattern: Math.random()
+
+  - id: imali-no-extractable-keys
+    message: CryptoKeys must be created non-extractable so key material can never be read out by script.
+    severity: ERROR
+    languages: [javascript]
+    pattern-either:
+      - pattern: crypto.subtle.deriveKey($A, $B, $C, true, $E)
+      - pattern: crypto.subtle.importKey($A, $B, $C, true, $E)
+      - pattern: crypto.subtle.generateKey($A, true, $C)
+      - pattern: crypto.subtle.exportKey(...)
+      - pattern: crypto.subtle.wrapKey(...)
+
+  - id: imali-weak-crypto
+    message: Use AES-GCM and SHA-256 or stronger. CBC/CTR/ECB lack authentication; SHA-1/MD5 are broken.
+    severity: ERROR
+    languages: [javascript]
+    paths: { include: ['/js/'] }
+    pattern-regex: "['\"](AES-CBC|AES-CTR|AES-ECB|SHA-1|MD5|RSA-PKCS1-v1_5)['\"]"
+
+  - id: imali-no-console
+    message: "Don't log in app code: logs can leak financial data on shared or debugged devices."
+    severity: WARNING
+    languages: [javascript]
+    paths: { include: ['/js/', '/sw.js'] }
+    pattern: console.$M(...)
+
+  - id: imali-no-external-urls
+    message: >-
+      External URLs break the offline/no-tracking promise and are blocked by the CSP. Ship assets
+      locally; for links to outside sites, show the address as text.
+    severity: ERROR
+    languages: [javascript]
+    paths: { include: ['/js/'] }
+    pattern-regex: "(href|src)\\s*:\\s*['\"`](https?:)?//"

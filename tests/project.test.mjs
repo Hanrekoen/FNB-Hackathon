@@ -1,0 +1,79 @@
+// Project-wide checks: translations complete, offline cache complete, no unsafe DOM APIs.
+
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { test } from 'node:test';
+import af from '../js/lang/af.js';
+import en from '../js/lang/en.js';
+import zu from '../js/lang/zu.js';
+import { RULE_IDS } from '../js/core/scam.js';
+import { IN_CATS, OUT_CATS } from '../js/core/categories.js';
+
+const ROOT = new URL('../', import.meta.url);
+const read = (p) => readFileSync(new URL(p, ROOT), 'utf8');
+const walk = (dir) => readdirSync(new URL(dir, ROOT), { recursive: true })
+  .map((f) => `${dir}/${f.replaceAll('\\', '/')}`)
+  .filter((f) => /\.\w+$/.test(f));
+const sources = walk('js').filter((f) => f.endsWith('.js') && !f.includes('/lang/'));
+
+function usedKeys() {
+  const keys = new Set([
+    ...IN_CATS.map((c) => `cat.${c}`),
+    ...OUT_CATS.map((c) => `cat.${c}`),
+    ...RULE_IDS.map((id) => `scam.r.${id}`),
+  ]);
+  for (const level of ['none', 'low', 'medium', 'high']) keys.add(`scam.level.${level}`).add(`scam.advice.${level}`);
+  for (const level of ['ok', 'caution', 'danger']) keys.add(`credit.level.${level}`);
+  for (const n of [1, 2, 3, 4]) for (const p of ['q', 'a', 'b', 'why']) keys.add(`quiz.${n}.${p}`);
+  for (const f of [...sources, 'js/core/security.js', 'js/core/credit.js']) {
+    const s = read(f);
+    for (const m of s.matchAll(/\b(?:t|list)\(\s*'([\w.]+)'/g)) keys.add(m[1]);
+    for (const m of s.matchAll(/'((?:err|credit\.r|nav)\.\w+)'/g)) keys.add(m[1]);
+  }
+  return keys;
+}
+
+test('every translation key used in code exists in English', () => {
+  const missing = [...usedKeys()].filter((k) => !(k in en));
+  assert.deepEqual(missing, []);
+});
+
+for (const [name, dict] of Object.entries({ af, zu })) {
+  test(`${name} translation has every English key with matching placeholders`, () => {
+    const missing = Object.keys(en).filter((k) => !(k in dict));
+    assert.deepEqual(missing, [], `missing in ${name}`);
+    for (const [k, v] of Object.entries(en)) {
+      if (typeof v === 'string') {
+        const ph = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+        assert.deepEqual(ph(dict[k]), ph(v), `placeholders differ for ${k} in ${name}`);
+      } else {
+        assert.ok(Array.isArray(dict[k]) && dict[k].length === v.length, `list ${k} in ${name}`);
+      }
+    }
+  });
+}
+
+test('service worker precaches every app file', () => {
+  const sw = read('sw.js');
+  const listed = new Set([...sw.matchAll(/'\.\/([^']*)'/g)].map((m) => m[1]));
+  const required = ['index.html', 'manifest.webmanifest', ...walk('js'), ...walk('css'), ...walk('icons')];
+  assert.deepEqual(required.filter((f) => !listed.has(f)), []);
+  assert.deepEqual([...listed].filter((f) => f && !required.includes(f)), [], 'stale entries in sw.js');
+});
+
+test('no unsafe HTML or code-evaluation APIs are used', () => {
+  const banned = /\.(innerHTML|outerHTML)\s*=|insertAdjacentHTML|document\.write|\beval\(|new Function\(|setTimeout\(\s*['"`]/;
+  for (const f of [...sources, 'sw.js']) assert.doesNotMatch(read(f), banned, f);
+});
+
+test('CSP is strict and identical in the page, dev server and hosting headers', () => {
+  const meta = read('index.html').match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)[1];
+  for (const directive of ["default-src 'none'", "script-src 'self'", "require-trusted-types-for 'script'", "base-uri 'none'", "form-action 'none'"]) {
+    assert.ok(meta.includes(directive), directive);
+  }
+  assert.doesNotMatch(meta, /unsafe-inline|unsafe-eval|\*/);
+  // Headers add frame-ancestors, which browsers ignore in a <meta> tag.
+  const full = `${meta}; frame-ancestors 'none'`;
+  assert.ok(read('_headers').includes(full), '_headers CSP');
+  assert.ok(read('scripts/serve.mjs').includes(full), 'serve.mjs CSP');
+});

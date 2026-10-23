@@ -1,0 +1,17 @@
+{
+  "name": "imali",
+  "version": "1.0.0",
+  "description": "Imali: a private, offline, multilingual money-confidence app (PWA) for people with irregular incomes.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "test": "node --test \"tests/*.test.mjs\"",
+    "icons": "node scripts/make-icons.mjs",
+    "build": "node scripts/build.mjs",
+    "security": "semgrep scan --metrics=off --error --config .semgrep --config p/javascript --config p/nodejs --config p/xss --config p/secrets --config p/owasp-top-ten --config p/security-audit --config p/insecure-transport ."
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
