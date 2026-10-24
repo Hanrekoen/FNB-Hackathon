@@ -7,9 +7,10 @@ import { centsToInput, parseAmount, parseOptionalAmount, parsePercent } from '..
 import { h } from '../dom.js';
 import { icon } from '../icons.js';
 import { list, t } from '../i18n.js';
-import { amountInput, bulletList, card, field, formError, money, pageTitle, showError, stat } from './ui.js';
+import { icon } from '../icons.js';
+import { amountInput, bulletList, card, field, formError, money, pageTitle, showError, stat, withIcon } from './ui.js';
 
-const LEVEL_ICON = { ok: 'circle-check', caution: 'triangle-alert', danger: 'octagon-x' };
+const LEVEL_ICON = { ok: 'check', caution: 'alert', danger: 'stop' };
 
 export function render(ctx) {
   const est = monthlyIncomeEstimate(ctx.data.transactions, todayISO());
@@ -57,14 +58,14 @@ export function render(ctx) {
       err,
       h('button', { class: 'btn', type: 'submit' }, t('credit.calc'))),
     out,
-    card(['flag', t('credit.flagsTitle')], bulletList(list('credit.flags'))),
-    card(['scale', t('credit.rightsTitle')], bulletList(list('credit.rights')), h('p', { class: 'hint', text: t('credit.disclaimer') })));
+    card(withIcon('flag', t('credit.flagsTitle')), bulletList(list('credit.flags'))),
+    card(withIcon('scale', t('credit.rightsTitle')), bulletList(list('credit.rights')), h('p', { class: 'hint', text: t('credit.disclaimer') })));
 }
 
 function resultCard(res, a) {
   return h('section', { class: `card result ${a.level}`, 'aria-labelledby': 'res-h' },
     h('h2', { id: 'res-h', tabindex: -1, text: t('credit.result') }),
-    h('p', { class: `badge with-icon ${a.level}` }, icon(LEVEL_ICON[a.level]), t(`credit.level.${a.level}`)),
+    h('p', { class: `badge ${a.level}` }, icon(LEVEL_ICON[a.level], { cls: 'title-icon' }), t(`credit.level.${a.level}`)),
     h('div', { class: 'stats' },
       stat(t('credit.monthly'), money(res.monthly)),
       stat(t('credit.total'), money(res.total)),
@@ -72,6 +73,6 @@ function resultCard(res, a) {
       stat(t('credit.real'), `${res.effectiveRate.toFixed(1)}%`)),
     h('p', { class: 'big-fact', text: t('credit.per100', { amount: money(res.payBackPer100) }) }),
     h('ul', { class: 'reasons' }, a.reasons.map((r) => h('li', { class: r.level },
-      h('span', { 'aria-hidden': 'true', text: `${LEVEL_ICON[r.level]} ` }), t(r.key, r.vars)))),
+      icon(LEVEL_ICON[r.level], { cls: 'title-icon' }), t(r.key, r.vars)))),
     h('p', { class: 'alert ok', text: t('credit.saveInstead', { monthly: money(res.monthly), months: res.monthsToSave }) }));
 }

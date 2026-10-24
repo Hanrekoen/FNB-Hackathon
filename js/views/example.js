@@ -23,6 +23,7 @@ export async function loadExample(ctx) {
     registration: t('demo.registration'),
     emergency: t('save.emergencyName'),
     releaseReason: t('demo.releaseReason'),
+    holiday: t('demo.holiday'),
   };
   const next = generateDemo({ today: todayISO(), now: Date.now(), names, profileName: d.profile.name, newId });
   location.hash = '#/home';

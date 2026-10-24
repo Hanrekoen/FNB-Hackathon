@@ -3,6 +3,7 @@ import { todayISO } from './core/dates.js';
 import { formatMoney } from './core/money.js';
 import { MAX_LEN } from './core/scam.js';
 import { h } from './dom.js';
+import { icon } from './icons.js';
 import { locale, t } from './i18n.js';
 import { icon } from './icons.js';
 import { applyPrefs, loadPrefs, savePrefs } from './prefs.js';
@@ -18,11 +19,11 @@ import * as settings from './views/settings.js';
 
 const ROUTES = { home, money: budget, save: savings, credit, scams, settings, profile };
 const TABS = [
-  ['home', 'house'],
-  ['money', 'wallet'],
-  ['save', 'piggy-bank'],
-  ['credit', 'credit-card'],
-  ['scams', 'shield-check'],
+  ['home', 'home'],
+  ['money', 'money'],
+  ['save', 'piggy'],
+  ['credit', 'card'],
+  ['scams', 'shield'],
 ];
 
 const root = document.getElementById('app');
@@ -157,7 +158,7 @@ async function showGate() {
 function renderShell() {
   const nav = h('nav', { class: 'tabbar', 'aria-label': t('nav.label') },
     TABS.map(([name, iconName]) => h('a', { href: `#/${name}`, 'data-tab': name },
-      icon(iconName),
+      h('span', { class: 'tab-icon' }, icon(iconName)),
       h('span', { class: 'tab-label', text: t(`nav.${name}`) }))));
   root.replaceChildren(
     h('header', { class: 'topbar' },

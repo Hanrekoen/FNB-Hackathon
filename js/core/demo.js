@@ -5,9 +5,12 @@
 import { billNextDue, summarize } from './budget.js';
 import { DAY_MS, allocate, applyAllocation, checkRelease, payBill, requestRelease, setAside } from './buckets.js';
 import { addDays, parseISO } from './dates.js';
+import { PER_MONTH, contributionsLeft, maxCuts, monthlyCapacity } from './goals.js';
 import { emptyData } from './schema.js';
 
 export const DEMO_DAYS = 42;
+const HOLIDAY_WEEKS = 10;
+const HOLIDAY_SAVED = 40_000;
 
 const INCOMES = [
   [-41, 240_000, 'allowance'],
@@ -88,6 +91,22 @@ export function generateDemo({ today, now, names, profileName = '', newId }) {
   const s = summarize(data, today);
   const topUp = Math.min(s.unfunded + release, Math.max(0, s.free));
   if (topUp > 0) setAside(data, topUp, today, id);
+  addHoliday(data, today, names.holiday, id);
   if (!checkRelease(data, release)) requestRelease(data, release, names.releaseReason, now - DAY_MS, id);
   return data;
+}
+
+/**
+ * A holiday goal sized from her own numbers so it always needs a few small cuts ('stretch'),
+ * whatever day the example is loaded. A fixed date and amount would drift into 'unrealistic'.
+ */
+function addHoliday(data, today, name, id) {
+  const goal = { id: id(), name, target: 0, kind: 'goal', by: addDays(today, HOLIDAY_WEEKS * 7) };
+  const saved = Math.min(HOLIDAY_SAVED, Math.floor(Math.max(0, summarize(data, today).free) / 2 / 1000) * 1000);
+  if (saved > 0) data.transactions.push({ id: id(), type: 'save', amount: saved, goalId: goal.id, category: 'save', note: '', date: addDays(today, -13) });
+  data.goals.push(goal);
+  const capacity = monthlyCapacity(data, today, goal);
+  const need = capacity.available + Math.ceil(maxCuts(data, today) / 2);
+  const perWeek = Math.floor(need / PER_MONTH.varies);
+  goal.target = saved + Math.max(5_000, Math.floor((perWeek * contributionsLeft(data, today, goal.by)) / 5_000) * 5_000);
 }

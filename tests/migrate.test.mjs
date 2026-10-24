@@ -73,6 +73,30 @@ test('malformed fields are dropped or reset', () => {
   assert.equal(d.demo, false);
 });
 
+test('goals keep a valid deadline and plan; old goals without one still load', () => {
+  const plan = { cuts: [{ category: 'fun', current: 40_000, cut: 12_000 }], perContribution: 65_000, acceptedAt: 1_700_000_000_000 };
+  const d = normalize({
+    goals: [
+      { id: 'old', name: 'Shoes', target: 50_000 },
+      { id: 'hol', name: 'Holiday', target: 300_000, by: '2026-12-15', plan },
+      { id: 'past', name: 'Past', target: 10_000, by: '2020-01-01' },
+      { id: 'bad', name: 'Bad', target: 10_000, by: '15/12/2026', plan },
+      { id: 'em', name: 'Emergency', target: 100_000, kind: 'emergency', by: '2026-12-15' },
+      { id: 'junk', name: 'Junk plan', target: 10_000, by: '2026-12-15', plan: { cuts: [{ category: 'rent', current: 1, cut: 1 }, { category: 'fun', cut: -1 }], perContribution: 5_000, acceptedAt: 1 } },
+      { id: 'noplan', name: 'No plan', target: 10_000, by: '2026-12-15', plan: { cuts: [], perContribution: 0, acceptedAt: 1 } },
+    ],
+  }, TODAY);
+  const byId = Object.fromEntries(d.goals.map((g) => [g.id, g]));
+  assert.ok(!('by' in byId.old) && !('plan' in byId.old));
+  assert.equal(byId.hol.by, '2026-12-15');
+  assert.deepEqual(byId.hol.plan, plan);
+  assert.equal(byId.past.by, '2020-01-01');
+  assert.ok(!('by' in byId.bad) && !('plan' in byId.bad));
+  assert.ok(!('by' in byId.em), 'the emergency fund never has a deadline');
+  assert.deepEqual(byId.junk.plan.cuts, []);
+  assert.ok(!('plan' in byId.noplan));
+});
+
 test('garbage input becomes empty data', () => {
   for (const bad of [null, 42, 'text', { transactions: 'nope', bills: [null, 1] }]) {
     const d = normalize(bad, TODAY);

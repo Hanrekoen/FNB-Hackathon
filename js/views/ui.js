@@ -3,6 +3,7 @@ import { ICONS } from '../core/categories.js';
 import { parseISO, todayISO } from '../core/dates.js';
 import { formatMoney } from '../core/money.js';
 import { h } from '../dom.js';
+import { icon } from '../icons.js';
 import { locale, t } from '../i18n.js';
 import { icon } from '../icons.js';
 
@@ -10,7 +11,10 @@ export const money = (cents) => formatMoney(cents, locale());
 export const newId = () => crypto.randomUUID();
 
 export function fmtDate(iso) {
-  return new Intl.DateTimeFormat(locale(), { weekday: 'short', day: 'numeric', month: 'short' }).format(parseISO(iso));
+  const d = parseISO(iso);
+  // Show the year only when it isn't this year, e.g. a goal date moved into next year.
+  const year = d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric';
+  return new Intl.DateTimeFormat(locale(), { weekday: 'short', day: 'numeric', month: 'short', year }).format(d);
 }
 
 export function fmtDateTime(ms) {
@@ -36,7 +40,7 @@ export function pageTitle(title, lead) {
 let uid = 0;
 export function field(label, input, hint) {
   input.id ||= `f${++uid}`;
-  const nodes = [h('label', { for: input.id, text: label }), input];
+  const nodes = [h('label', { for: input.id }, label), input];
   if (hint) {
     input.setAttribute('aria-describedby', `${input.id}-hint`);
     nodes.push(h('p', { class: 'hint', id: `${input.id}-hint`, text: hint }));
@@ -107,9 +111,11 @@ export function bucketBar({ needs, safety, free }) {
       h('dd', { text: money(v) })))));
 }
 
-/** A card; `title` is text, or [iconName, text] for a heading with an icon. */
+/** Heading content with a leading icon. */
+export const withIcon = (name, text) => [icon(name, { cls: 'title-icon' }), text];
+
 export function card(title, ...children) {
-  return h('section', { class: 'card' }, heading('h2', title), children);
+  return h('section', { class: 'card' }, h('h2', {}, title), children);
 }
 
 export function heading(tag, title, props = {}) {
@@ -172,6 +178,6 @@ export function txList(ctx, txs, withDelete) {
       h('span', { class: `tx-amt ${SIGN_CLASS[sign] ?? ''}`, text: `${sign}${money(tx.amount)}` }),
       withDelete && !UNDELETABLE.includes(tx.type) && h('button', {
         type: 'button', class: 'icon-btn', 'aria-label': t('tx.delete', { what: title, amount: money(tx.amount) }), on: { click: remove },
-      }, trashIcon()));
+      }, icon('trash')));
   }));
 }

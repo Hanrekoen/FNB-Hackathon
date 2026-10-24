@@ -9,6 +9,7 @@ import { centsToInput, parseAmount, parseOptionalAmount } from '../core/money.js
 import { paymentNeedsCheck } from '../core/scam-advice.js';
 import { h } from '../dom.js';
 import { t } from '../i18n.js';
+import { icon } from '../icons.js';
 import { profileSummary } from './profile.js';
 import {
   amountInput, checkRow, daysText, field, fmtDate, formError, money, newId, pageTitle, select, showError, sortTx, stat, txList,
@@ -106,15 +107,19 @@ function allocationCard(ctx, alloc, today) {
 
   const needsIn = amountInput({ id: 'alloc-needs', value: centsToInput(alloc.needs) });
   const safetyIn = amountInput({ id: 'alloc-safety', value: centsToInput(alloc.safety) });
+  const goalIns = alloc.goals.map((g) => [g, amountInput({ value: centsToInput(g.amount) })]);
   const err = formError();
   function onAdjust(e) {
     e.preventDefault();
-    const needs = parseOptionalAmount(needsIn.value);
-    const safety = parseOptionalAmount(safetyIn.value);
-    if (needs === null) return showError(err, t('err.amount'), needsIn);
-    if (safety === null) return showError(err, t('err.amount'), safetyIn);
-    if (needs + safety > alloc.amount) return showError(err, t('err.allocTooMuch', { amount: money(alloc.amount) }), safetyIn);
-    apply({ ...alloc, needs, safety });
+    const parsed = [[needsIn, parseOptionalAmount(needsIn.value)], [safetyIn, parseOptionalAmount(safetyIn.value)],
+      ...goalIns.map(([, input]) => [input, parseOptionalAmount(input.value)])];
+    const bad = parsed.find(([, v]) => v === null);
+    if (bad) return showError(err, t('err.amount'), bad[0]);
+    const [needs, safety, ...goalAmounts] = parsed.map(([, v]) => v);
+    if (needs + safety + goalAmounts.reduce((a, b) => a + b, 0) > alloc.amount) {
+      return showError(err, t('err.allocTooMuch', { amount: money(alloc.amount) }), safetyIn);
+    }
+    apply({ ...alloc, needs, safety, goals: goalIns.map(([g], i) => ({ ...g, amount: goalAmounts[i] })) });
   }
 
   return h('section', { class: 'card highlight', id: 'alloc', tabindex: -1, 'aria-labelledby': 'alloc-h' },
@@ -124,6 +129,7 @@ function allocationCard(ctx, alloc, today) {
       row(t('split.bills'), alloc.needs, 'needs'),
       alloc.needs > 0 && billNames && h('li', { class: 'hint', text: t('alloc.billsFor', { bills: billNames }) }),
       row(t('split.save', { pct: alloc.pct }), alloc.safety, 'safety'),
+      alloc.goals.map((g) => row(t('alloc.goal', { goal: g.name }), g.amount, 'safety')),
       row(t('split.spend'), alloc.free, 'free')),
     h('p', { class: 'big-fact', text: t('alloc.perDay', { amount: money(after.perDay), n: after.daysLeft }) }),
     h('div', { class: 'row' },
@@ -133,6 +139,7 @@ function allocationCard(ctx, alloc, today) {
       h('form', { novalidate: true, on: { submit: onAdjust } },
         field(t('split.bills'), needsIn),
         field(t('alloc.safetyLabel'), safetyIn),
+        goalIns.map(([g, input]) => field(t('alloc.goal', { goal: g.name }), input)),
         err,
         h('button', { class: 'btn secondary', type: 'submit' }, t('alloc.applyAdjusted')))),
     h('p', { class: 'hint', text: t('alloc.hint', { n: NOTICE_DAYS }) }));
@@ -286,6 +293,7 @@ function billRow(ctx, b, today) {
       h('button', { type: 'button', class: 'btn small', 'aria-label': t('bills.paidLabel', { name: b.name }), on: { click: pay } }, t('bills.paid')),
       h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('bills.delete', { name: b.name }), on: { click: remove } },
         trashIcon())),
+        icon('trash'))),
     err);
 }
 

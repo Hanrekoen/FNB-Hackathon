@@ -4,8 +4,9 @@ import { checkNewSecret } from '../core/security.js';
 import { h } from '../dom.js';
 import { icon } from '../icons.js';
 import { LANGS, getLang, list, t } from '../i18n.js';
+import { icon } from '../icons.js';
 import * as vault from '../vault.js';
-import { bulletList, busy, checkRow, field, formError, heading, showError } from './ui.js';
+import { bulletList, busy, checkRow, field, formError, showError, withIcon } from './ui.js';
 
 const MAX_BACKUP_BYTES = 8_000_000;
 
@@ -79,7 +80,7 @@ export function onboarding(ctx) {
     brand(),
     langPicker(ctx),
     h('section', { class: 'card' }, h('h2', { text: t('gate.whatTitle') }), bulletList(list('gate.what'))),
-    h('section', { class: 'card highlight' }, heading('h2', ['lock', t('gate.privateTitle')]), h('p', { text: t('gate.privateBody') })),
+    h('section', { class: 'card highlight' }, h('h2', {}, withIcon('lock', t('gate.privateTitle'))), h('p', { text: t('gate.privateBody') })),
     h('form', { class: 'card', novalidate: true, 'aria-labelledby': 'ob-h', on: { submit: onSubmit } },
       h('h2', { id: 'ob-h', text: t('gate.setupTitle') }),
       field(t('gate.name'), name, t('gate.nameHint')),

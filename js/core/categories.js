@@ -7,5 +7,5 @@ export const OUT_CATS = [
   'health', 'family', 'stokvel', 'debt', 'clothing', 'fun', 'other',
 ];
 
-// Icon names (see js/icon-data.js) for each kind of transaction.
-export const ICONS = { in: 'plus', out: 'minus', save: 'piggy-bank', withdraw: 'undo-2', needs: 'shield', release: 'arrow-right' };
+// Icon names (see js/icons.js) for each transaction type.
+export const ICONS = { in: 'plus', out: 'minus', save: 'piggy', withdraw: 'undo', needs: 'shieldCheck', release: 'arrowRight' };

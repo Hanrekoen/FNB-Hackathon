@@ -3,8 +3,10 @@
 // bank here; these are amounts Imali keeps aside on the user's behalf.
 
 import { cashAvailable, goalSaved, needsBalance, safetyBalance, summarize } from './budget.js';
+import { needsBalance, safetyBalance, summarize } from './budget.js';
 import { addDays, toISO } from './dates.js';
 import { monthlyEquivalent } from './forecast.js';
+import { datedGoalContributions, savingsShare, savingsTarget } from './goals.js';
 
 export const NOTICE_DAYS = 3;
 export const DAY_MS = 86_400_000;
@@ -19,33 +21,38 @@ export const pendingTotal = (data) => sum(pendingReleases(data).map((r) => r.amo
 /** Needs money not already promised to a pending release. */
 export const needsAvailable = (data) => Math.max(0, needsBalance(data.transactions) - pendingTotal(data));
 
-/** Where the Safety share of new income goes: the emergency fund first, then any unfinished goal. */
-export function safetyTarget(data) {
-  const open = data.goals.filter((g) => goalSaved(data.transactions, g.id) < g.target);
-  return open.find((g) => g.kind === 'emergency') ?? open[0] ?? null;
-}
-
 /**
  * Split income that was just recorded: cover bills due before the next income first, then
  * the savings %, and the rest is free. Never sets aside more than the cash actually on hand.
  * `incomeId` links the split to its income, so deleting the income can undo the split.
+ * Split income that was just recorded: bills due before the next income first, then the
+ * savings % (emergency fund first), then each dated goal's per-payday amount, nearest deadline
+ * first. The rest is free. Never sets aside more than the free money actually on hand.
  */
 export function allocate(data, amount, today, incomeId = null) {
   const s = summarize(data, today);
   const room = Math.max(0, s.cash - s.needs);
   const needs = Math.min(amount, room, Math.max(0, s.billsTotal - needsAvailable(data)));
   const remaining = amount - needs;
-  const target = safetyTarget(data);
-  const hasGoals = data.goals.length > 0;
-  const safety = hasGoals && !target ? 0 : Math.min(room - needs, Math.floor((remaining * data.settings.savePercent) / 100));
+  let left = Math.min(remaining, room - needs);
+  const safety = Math.min(left, savingsShare(data, remaining));
+  left -= safety;
+  const goals = [];
+  for (const c of datedGoalContributions(data, today)) {
+    const give = Math.min(left, c.amount);
+    if (give <= 0) break;
+    goals.push({ ...c, amount: give });
+    left -= give;
+  }
   return {
     amount,
     incomeId,
     needs,
     safety,
-    free: remaining - safety,
+    goals,
+    free: remaining - safety - sum(goals.map((g) => g.amount)),
     pct: data.settings.savePercent,
-    goalId: target?.id ?? null,
+    goalId: savingsTarget(data)?.id ?? null,
     nextIncome: s.next.date,
     bills: s.billsDue,
   };
@@ -55,8 +62,13 @@ export function allocate(data, amount, today, incomeId = null) {
 export function applyAllocation(data, { needs, safety, goalId, incomeId = null }, today, emergencyName, newId = defaultId) {
   const link = incomeId ? { fromIncome: incomeId } : {};
   if (needs > 0) data.transactions.push({ id: newId(), type: 'needs', amount: needs, category: 'needs', note: '', date: today, ...link });
+/** Records an allocation. Creates an emergency fund if the savings % has nowhere to go yet. */
+export function applyAllocation(data, { needs, safety, goalId, goals = [] }, today, emergencyName, newId = defaultId) {
+  const save = (goal, amount) => data.transactions.push({ id: newId(), type: 'save', amount, goalId: goal, category: 'save', note: '', date: today });
+  if (needs > 0) data.transactions.push({ id: newId(), type: 'needs', amount: needs, category: 'needs', note: '', date: today });
+  for (const g of goals) if (g.amount > 0 && data.goals.some((x) => x.id === g.goalId)) save(g.goalId, g.amount);
   if (safety <= 0) return;
-  let id = goalId ?? safetyTarget(data)?.id ?? (data.goals.find((g) => g.kind === 'emergency') ?? data.goals[0])?.id;
+  let id = goalId ?? savingsTarget(data)?.id ?? data.goals.find((g) => g.kind === 'emergency')?.id;
   if (!id) {
     id = newId();
     data.goals.push({ id, name: emergencyName, target: EMERGENCY_STARTER, kind: 'emergency' });
@@ -79,6 +91,7 @@ export function deleteTransaction(data, txId, today, newId = defaultId) {
     data.transactions.push({ id: newId(), type: 'release', amount: excess, category: 'release', note: '', date: today, correction: true });
   }
   return { linked, corrected: Math.max(0, excess) };
+  save(id, safety);
 }
 
 export function setAside(data, amount, today, newId = defaultId) {
