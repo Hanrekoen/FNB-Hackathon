@@ -1,9 +1,10 @@
 import { MAX_LEN, checkMessage } from '../core/scam.js';
 import { h } from '../dom.js';
 import { list, t } from '../i18n.js';
-import { bulletList, card, field, pageTitle } from './ui.js';
+import { icon } from '../icons.js';
+import { bulletList, card, field, pageTitle, withIcon } from './ui.js';
 
-const LEVEL_ICON = { none: '🟢', low: '🟡', medium: '🟠', high: '🔴' };
+const LEVEL_ICON = { none: 'shieldCheck', low: 'info', medium: 'alert', high: 'stop' };
 const QUIZ = [
   { id: 1, correct: 1 },
   { id: 2, correct: 0 },
@@ -40,15 +41,15 @@ export function render() {
         h('button', { class: 'btn', type: 'submit' }, t('scam.check')),
         h('button', { class: 'btn secondary', type: 'button', on: { click: clear } }, t('scam.clear')))),
     out,
-    card(t('scam.rulesTitle'), bulletList(list('scam.rules'))),
-    card(t('quiz.title'), QUIZ.map(quizItem)),
-    card(t('scam.helpTitle'), bulletList(list('scam.help'))));
+    card(withIcon('shield', t('scam.rulesTitle')), bulletList(list('scam.rules'))),
+    card(withIcon('quiz', t('quiz.title')), QUIZ.map(quizItem)),
+    card(withIcon('lifebuoy', t('scam.helpTitle')), bulletList(list('scam.help'))));
 }
 
 function resultCard(r) {
   return h('section', { class: `card result scam-${r.level}` },
     h('h2', { text: t('scam.result') }),
-    h('p', { class: `badge ${r.level}` }, h('span', { 'aria-hidden': 'true', text: `${LEVEL_ICON[r.level]} ` }), t(`scam.level.${r.level}`)),
+    h('p', { class: `badge ${r.level}` }, icon(LEVEL_ICON[r.level], { cls: 'title-icon' }), t(`scam.level.${r.level}`)),
     r.matches.length > 0 && h('h3', { text: t('scam.why') }),
     r.matches.length > 0 && bulletList(r.matches.map((id) => t(`scam.r.${id}`))),
     h('p', { text: t(`scam.advice.${r.level}`) }));
@@ -65,7 +66,7 @@ function quizItem(q) {
         buttons.forEach((b, j) => b.setAttribute('aria-pressed', String(i === j)));
         const right = i === q.correct;
         feedback.className = `quiz-feedback ${right ? 'ok' : 'danger'}`;
-        feedback.textContent = `${right ? '✅' : '❌'} ${t(right ? 'quiz.right' : 'quiz.wrong')} ${t(`quiz.${q.id}.why`)}`;
+        feedback.replaceChildren(icon(right ? 'check' : 'stop', { cls: 'title-icon' }), `${t(right ? 'quiz.right' : 'quiz.wrong')} ${t(`quiz.${q.id}.why`)}`);
       },
     },
   }, t(`quiz.${q.id}.${i ? 'b' : 'a'}`)));

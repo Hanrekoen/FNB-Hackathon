@@ -8,7 +8,7 @@ import { clearExample, loadExample } from './example.js';
 import { secretFields } from './gate.js';
 import { profileSummary } from './profile.js';
 import {
-  bulletList, busy, card, checkRow, field, formError, pageTitle, select, showError,
+  bulletList, busy, card, checkRow, field, formError, pageTitle, select, showError, withIcon,
 } from './ui.js';
 
 export function render(ctx) {
@@ -25,7 +25,7 @@ export function render(ctx) {
     pinCard(ctx),
     backupCard(ctx),
     securityCard(ctx, p),
-    card(t('settings.privacyTitle'), bulletList(list('settings.privacy'))),
+    card(withIcon('lock', t('settings.privacyTitle')), bulletList(list('settings.privacy'))),
     dangerCard(ctx));
 }
 
@@ -62,7 +62,7 @@ function exampleCard(ctx) {
 function installCard(ctx) {
   if (ctx.install.installed()) return null;
   const canPrompt = ctx.install.available();
-  return card(t('settings.install'),
+  return card(withIcon('download', t('settings.install')),
     h('p', { text: t(canPrompt ? 'settings.installBody' : 'settings.installManual') }),
     canPrompt && h('button', { class: 'btn', type: 'button', on: { click: () => ctx.install.prompt() } }, t('settings.installBtn')));
 }

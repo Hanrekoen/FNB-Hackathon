@@ -67,6 +67,53 @@ describe('income allocation waterfall', () => {
     assert.equal(a.free, 240_000 - 139_800);
   });
 
+  test('dated goals get their per-payday amount after the savings %', () => {
+    const d = lerato({ goals: [
+      { id: 'em', name: 'Emergency', target: 100_000, kind: 'emergency' },
+      { id: 'hol', name: 'Holiday', target: 40_000, kind: 'goal', by: '2026-11-30' }, // 4 weeks: R100 a week
+    ] });
+    const a = receive(d, 240_000);
+    assert.equal(a.needs, 139_800);
+    assert.equal(a.safety, 10_020);
+    assert.deepEqual(a.goals, [{ goalId: 'hol', name: 'Holiday', amount: 10_000 }]);
+    assert.equal(a.free, 240_000 - 139_800 - 10_020 - 10_000);
+    applyAllocation(d, a, TODAY, 'Emergency fund', id);
+    assert.equal(safetyBalance(d), 20_020);
+    assert.equal(summarize(d, TODAY).free, a.free);
+  });
+
+  test('nearest deadline first, never more than the free money', () => {
+    const d = lerato({ goals: [
+      { id: 'em', name: 'Emergency', target: 100_000, kind: 'emergency' },
+      { id: 'later', name: 'Later', target: 80_000, kind: 'goal', by: '2026-12-28' },
+      { id: 'soon', name: 'Soon', target: 40_000, kind: 'goal', by: '2026-11-30' },
+    ] });
+    const a = receive(d, 145_000);
+    assert.equal(a.safety, 520);
+    assert.deepEqual(a.goals, [{ goalId: 'soon', name: 'Soon', amount: 4_680 }]);
+    assert.equal(a.free, 0);
+  });
+
+  test('a full emergency fund stops the savings %, but dated goals still get theirs', () => {
+    const d = lerato({ goals: [
+      { id: 'em', name: 'Emergency', target: 10_000, kind: 'emergency' },
+      { id: 'hol', name: 'Holiday', target: 40_000, kind: 'goal', by: '2026-11-30' },
+    ] });
+    d.transactions.push({ id: id(), type: 'in', amount: 10_000, date: TODAY, category: 'gig' });
+    d.transactions.push({ id: id(), type: 'save', amount: 10_000, goalId: 'em', date: TODAY, category: 'save' });
+    const a = receive(d, 240_000);
+    assert.equal(a.safety, 0);
+    assert.equal(a.goals[0].amount, 10_000);
+  });
+
+  test('with only dated goals, the savings % starts an emergency fund', () => {
+    const d = lerato({ goals: [{ id: 'hol', name: 'Holiday', target: 40_000, kind: 'goal', by: '2026-11-30' }] });
+    const a = receive(d, 240_000);
+    assert.equal(a.safety, 10_020);
+    applyAllocation(d, a, TODAY, 'Emergency fund', id);
+    assert.equal(d.goals.filter((g) => g.kind === 'emergency').length, 1);
+  });
+
   test('without set-aside needs, unfunded bills still come out of free money', () => {
     const d = lerato();
     d.transactions.push({ id: id(), type: 'in', amount: 240_000, date: TODAY, category: 'gig' });

@@ -2,6 +2,7 @@ import { settleReleases } from './core/buckets.js';
 import { todayISO } from './core/dates.js';
 import { formatMoney } from './core/money.js';
 import { h } from './dom.js';
+import { icon } from './icons.js';
 import { locale, t } from './i18n.js';
 import { applyPrefs, loadPrefs, savePrefs } from './prefs.js';
 import * as vault from './vault.js';
@@ -16,11 +17,11 @@ import * as settings from './views/settings.js';
 
 const ROUTES = { home, money: budget, save: savings, credit, scams, settings, profile };
 const TABS = [
-  ['home', '🏠'],
-  ['money', '💵'],
-  ['save', '🐷'],
-  ['credit', '💳'],
-  ['scams', '🛡️'],
+  ['home', 'home'],
+  ['money', 'money'],
+  ['save', 'piggy'],
+  ['credit', 'card'],
+  ['scams', 'shield'],
 ];
 
 const root = document.getElementById('app');
@@ -136,16 +137,16 @@ async function showGate() {
 
 function renderShell() {
   const nav = h('nav', { class: 'tabbar', 'aria-label': t('nav.label') },
-    TABS.map(([name, icon]) => h('a', { href: `#/${name}`, 'data-tab': name },
-      h('span', { class: 'tab-icon', 'aria-hidden': 'true', text: icon }),
+    TABS.map(([name, iconName]) => h('a', { href: `#/${name}`, 'data-tab': name },
+      h('span', { class: 'tab-icon' }, icon(iconName)),
       h('span', { class: 'tab-label', text: t(`nav.${name}`) }))));
   root.replaceChildren(
     h('header', { class: 'topbar' },
       h('a', { class: 'brand', href: '#/home' }, h('img', { src: './icons/icon.svg', alt: '', width: 28, height: 28 }), 'Imali'),
       h('div', { class: 'row' },
-        h('a', { class: 'icon-btn', href: '#/settings', 'aria-label': t('nav.settings') }, h('span', { 'aria-hidden': 'true', text: '⚙️' })),
+        h('a', { class: 'icon-btn', href: '#/settings', 'aria-label': t('nav.settings') }, icon('settings')),
         h('button', { class: 'icon-btn', type: 'button', 'aria-label': t('action.lock'), on: { click: () => lockApp() } },
-          h('span', { 'aria-hidden': 'true', text: '🔒' })))),
+          icon('lock')))),
     h('main', { id: 'main' }),
     nav);
   renderView(true);

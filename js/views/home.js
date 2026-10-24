@@ -5,7 +5,7 @@ import { NUDGE_SNOOZE_DAYS, patternMismatch } from '../core/income.js';
 import { h } from '../dom.js';
 import { list, t } from '../i18n.js';
 import { loadExample } from './example.js';
-import { bucketBar, card, daysText, fmtDate, money, pageTitle, sortTx, txList, weekdayName } from './ui.js';
+import { bucketBar, card, daysText, fmtDate, money, pageTitle, sortTx, txList, weekdayName, withIcon } from './ui.js';
 
 const SOURCE_NOTE = { estimate: 'home.estimated', late: 'home.late', default: 'home.guess', payday: 'home.payday' };
 
@@ -52,7 +52,7 @@ export function render(ctx) {
       h('a', { class: 'link', href: '#/money' }, t('home.seeAll'))),
 
     h('section', { class: 'card tip' },
-      h('h2', { text: t('home.tip') }),
+      h('h2', {}, withIcon('bulb', t('home.tip'))),
       h('p', { text: tips[dayOfYear(today) % tips.length] })));
 }
 
@@ -81,7 +81,7 @@ function forecastCard(d, s, today) {
     ? t('forecast.onTrack')
     : t('forecast.runOut', { date: fmtDate(f.date), n: f.gap });
   return h('section', { class: `card forecast ${f.onTrack ? 'ok' : 'warn'}`, 'aria-labelledby': 'forecast-h' },
-    h('h2', { id: 'forecast-h', text: t('forecast.title') }),
+    h('h2', { id: 'forecast-h' }, withIcon('trend', t('forecast.title'))),
     h('p', { class: 'big-fact', text: message }),
     h('details', {},
       h('summary', { text: t('forecast.how') }),

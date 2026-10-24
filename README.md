@@ -12,12 +12,13 @@ Imali (isiZulu/isiXhosa for "money") is a private, offline-first, multilingual m
 |---|---|
 | **Budgeting** (irregular income) | No monthly budget. Imali works out a **"safe to spend today"** amount: free money, minus bills due before the next income that aren't set aside yet, divided by the days left. Users say how they're paid (monthly, every two weeks, weekly or "it varies"); for "it varies" it learns the gap between incomes, plans from a longer-than-usual gap, and plans 7 more days when income is late. It nudges if real income doesn't match the stated pattern. Bills can be monthly, weekly or once-off, and amounts that vary (taxi, fuel) are estimated from the last 6 weeks. |
 | **Three buckets** | When money arrives, one tap splits it: **Needs** (bills due before the next income; hard-guarded, released only after a 3-day notice that warns if a bill would be left short), **Safety** (emergency fund and goals; available instantly after a screen showing what withdrawing means) and **Free** (becomes safe-to-spend). Money is set aside *in Imali*: it never moves at a bank. |
-| **Saving** | "Pay yourself first": the savings % of each income goes to the emergency fund first, then other goals. |
+| **Saving** | "Pay yourself first": the savings % of each income goes to the emergency fund first. Goals can have a deadline: Imali works out how much to put aside each payday (or each week if income varies), checks it against a careful estimate of income (the 25th percentile of rolling 30-day totals) minus bills, normal spending and other commitments, and says whether it's on track. If not, it suggests specific cuts (only to extras like fun, clothing and food, never rent, school, health, transport or family), a later date, or a lower amount. Each income split then sets aside every dated goal's per-payday amount, nearest deadline first. |
 | **Intelligence** | Run-out forecast ("at this pace you run out on the 3rd, 5 days before your next income") and the user's biggest spending weekday. Every insight shows the numbers it used. |
 | **Responsible credit** | Loan checker shows the monthly repayment, total payback, "for every R100 you pay back R…", the real yearly cost including fees, and affordability against income. It flags rates above the National Credit Act maximum, explains borrower rights and lists signs of an illegal lender. |
 | **Scam awareness** | Paste any SMS, WhatsApp or email to get an **offline** risk check that explains each warning sign it finds (OTP requests, upfront fees, remote-access apps, "new number" scams, money mules…). Also golden rules, a quiz and what to do if you've been scammed. |
 | **Low-data tools** | Under 300 KB in total (less when compressed), no web fonts, no frameworks. A service worker caches everything, so the app works fully offline. |
 | **Multilingual** | English, Afrikaans and isiZulu, switchable on the lock screen and in Settings. The language picker is labelled in all three languages. |
+| **Icons** | Inline SVG line icons (no emoji), so they look the same on every phone and follow dark and high-contrast modes. Shapes adapted from [Lucide](https://lucide.dev) (ISC licence). |
 | **Accessible design** | Semantic HTML, labelled inputs, screen-reader announcements, focus management, 44–48 px tap targets, larger text and high-contrast modes, dark mode and reduced motion. Works from 320 px phones up to desktop. |
 
 ## Security
@@ -58,7 +59,8 @@ index.html, manifest.webmanifest, sw.js   PWA shell, offline cache
 css/app.css                               mobile-first styles, dark / high-contrast / large-text
 js/app.js                                 router, auto-lock, privacy blur, SW registration
 js/vault.js, js/idb.js                    encrypted storage
-js/core/*                                 pure logic (budget, buckets, income, forecast, schema, demo, credit, scam rules, crypto, PIN rules), unit tested
+js/core/*                                 pure logic (budget, buckets, goals, income, forecast, schema, demo, credit, scam rules, crypto, PIN rules), unit tested
+js/icons.js                               SVG icon set (no emoji)
 js/views/*                                screens
 js/lang/{en,af,zu}.js                     translations (isiZulu should get a native-speaker review)
 scripts/serve.mjs, scripts/make-icons.mjs dev server, icon generator

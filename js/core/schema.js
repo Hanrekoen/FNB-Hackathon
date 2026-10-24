@@ -3,6 +3,7 @@
 
 import { OUT_CATS } from './categories.js';
 import { isISODate } from './dates.js';
+import { CUT_CAPS } from './goals.js';
 import { PATTERNS, defaultIncome } from './income.js';
 import { MAX_CENTS } from './money.js';
 
@@ -81,6 +82,27 @@ function normalizeBill(b) {
   return out;
 }
 
+function normalizePlan(p) {
+  if (!p || typeof p !== 'object' || !isAmount(p.perContribution) || !isTime(p.acceptedAt)) return null;
+  const cuts = list(p.cuts)
+    .filter((c) => c.category in CUT_CAPS && isAmount(c.cut) && isInt(c.current, 0, MAX_CENTS))
+    .map((c) => ({ category: c.category, current: c.current, cut: c.cut }));
+  return { cuts, perContribution: p.perContribution, acceptedAt: p.acceptedAt };
+}
+
+/** A deadline is kept even once it has passed, so an old goal still loads; the form checks it's in the future. */
+function normalizeGoal(g) {
+  const out = { ...g, id: str(g.id, 64), name: str(g.name, 40), kind: g.kind === 'emergency' ? 'emergency' : 'goal' };
+  delete out.by;
+  delete out.plan;
+  if (out.kind === 'goal' && isISODate(g.by)) {
+    out.by = g.by;
+    const plan = normalizePlan(g.plan);
+    if (plan) out.plan = plan;
+  }
+  return out;
+}
+
 function normalizeRelease(r) {
   if (!isAmount(r.amount) || !isTime(r.requestedAt) || !isTime(r.availableAt) || !RELEASE_STATUS.includes(r.status)) return null;
   return { id: str(r.id, 64), amount: r.amount, reason: str(r.reason, 80), requestedAt: r.requestedAt, availableAt: r.availableAt, status: r.status };
@@ -98,9 +120,7 @@ export function normalize(input, today = null) {
     .filter((t) => TX_TYPES.includes(t.type) && isAmount(t.amount) && isISODate(t.date))
     .map(normalizeTx);
   out.bills = list(d?.bills).filter((b) => isAmount(b.amount)).map(normalizeBill).filter(Boolean);
-  out.goals = list(d?.goals)
-    .filter((g) => isAmount(g.target))
-    .map((g) => ({ ...g, id: str(g.id, 64), name: str(g.name, 40), kind: g.kind === 'emergency' ? 'emergency' : 'goal' }));
+  out.goals = list(d?.goals).filter((g) => isAmount(g.target)).map(normalizeGoal);
   out.releases = list(d?.releases).map(normalizeRelease).filter(Boolean);
   out.nextIncome = isISODate(out.nextIncome) ? out.nextIncome : null;
   out.demo = d?.demo === true;

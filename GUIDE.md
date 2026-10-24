@@ -44,6 +44,7 @@ The screen also has:
 - The "pay yourself first" rule and the savings percentage.
 - **Savings goals** with progress bars. Users can move money into a goal or take it back out.
 - A one-tap **emergency fund** starter goal.
+- **Goals with a deadline** ([js/core/goals.js](js/core/goals.js)): "R3 000 by 15 December" becomes an amount per payday (per week if income varies), a status (on track / a stretch / too big / not enough history yet) and, when needed, specific cuts to extras, a later date or a lower amount. "How we worked this out" shows every number used. Cuts never touch rent, bills, school, health, family, stokvel, debt or transport.
 
 ### Credit / loan checker ([js/views/credit.js](js/views/credit.js), logic in [js/core/credit.js](js/core/credit.js))
 The user enters a loan amount, interest rate, term, initiation fee and monthly fee. Imali shows:
@@ -91,12 +92,15 @@ _headers                                  security headers for Netlify / Cloudfl
 css/app.css                               mobile-first styles; dark, high-contrast and large-text modes
 js/app.js                                 router, auto-lock, privacy blur, Trusted Types policy, SW registration
 js/dom.js                                 h(): the only way UI is built (text nodes only, no innerHTML)
+js/icons.js                               inline SVG icons built with createElementNS (no emoji)
 js/i18n.js + js/lang/{en,af,zu}.js        translations and t() lookup with placeholders
 js/prefs.js                               display preferences (localStorage)
 js/idb.js                                 small IndexedDB wrapper
 js/vault.js                               encrypted storage: create / unlock / lock / save / backup / restore
 js/core/                                  pure logic with no DOM, all unit-tested
-  budget.js      safe-to-spend, income gap, bill due dates, income split
+  budget.js      safe-to-spend, income gap, bill due dates
+  buckets.js     Needs / Safety / Free, income split, release notice
+  goals.js       goals with a deadline: per-payday amount, capacity, cuts, alternatives
   credit.js      repayment, effective rate, loan risk assessment
   scam.js        offline scam rules
   crypto.js      PBKDF2 + AES-GCM helpers
@@ -150,7 +154,7 @@ $env:PORT=3000; npm start            # PowerShell
 ```bash
 npm test
 ```
-There are 40 tests in 6 suites, and they currently all pass:
+There are 117 tests, and they currently all pass. The main suites:
 - **[tests/core.test.mjs](tests/core.test.mjs):** money parsing and formatting, date arithmetic, budget logic (income gaps, late income, bills in short months, shortfall, income split), credit maths and risk flags, scam checker (true positives, "never share" notices not flagged, huge input), PIN rules.
 - **[tests/crypto.test.mjs](tests/crypto.test.mjs):** encrypt/decrypt round trip, a new IV each time, a wrong PIN, tampered data or wrong context all fail, keys can't be exported, iteration bounds, record shape checks.
 - **[tests/project.test.mjs](tests/project.test.mjs):** every translation key exists in all three languages with matching placeholders, every app file is in the service-worker cache, no unsafe HTML or `eval` APIs are used, and the CSP is strict and identical in all three places.
@@ -195,7 +199,7 @@ This copies only the files the app needs into `dist/`. `dist/` is git-ignored.
 
 1. **Lock screen:** switch the language to isiZulu and back, then create a PIN. Try `123456` first to show it being rejected.
 2. **Money:** add an income of R1,500 from 10 days ago and one of R1,200 from today, then add a R400 bill due next week. Show "safe to spend today" and the estimated next payday.
-3. **Save:** start the emergency fund and move R100 into it. The safe amount on Home goes down.
+3. **Save:** start the emergency fund and move R100 into it. The safe amount on Home goes down. With example data loaded, the Holiday goal shows a per-week amount, that it's a stretch, and two small cuts; tap "Use this plan".
 4. **Credit:** check R5,000 at 60% over 6 months, with a R600 initiation fee and a R69 monthly fee, against an income of R3,000/month. The repayment is about R1,172/month (39% of income) and the real yearly cost is about 239%. It is flagged **danger**, with the reasons explained.
 5. **Scams:** paste *"Congratulations! You've won R50 000. Pay a R250 release fee and send the OTP to claim: bit.ly/xyz"*. It is rated **high risk**, with each warning sign explained.
 6. **Security:** set "Lock when I leave the app for" to 30 sec in Settings, go to the home screen and back after 30 seconds, and the app is locked. Show that the content is blurred in the app switcher, and that DevTools → IndexedDB contains only ciphertext.

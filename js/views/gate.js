@@ -3,8 +3,9 @@
 import { checkNewSecret } from '../core/security.js';
 import { h } from '../dom.js';
 import { LANGS, getLang, list, t } from '../i18n.js';
+import { icon } from '../icons.js';
 import * as vault from '../vault.js';
-import { bulletList, busy, checkRow, field, formError, showError } from './ui.js';
+import { bulletList, busy, checkRow, field, formError, showError, withIcon } from './ui.js';
 
 const MAX_BACKUP_BYTES = 8_000_000;
 
@@ -38,7 +39,7 @@ function langPicker(ctx) {
   const sel = h('select', { id: 'lang', on: { change: () => ctx.setLang(sel.value) } },
     LANGS.map((l) => h('option', { value: l.code, selected: l.code === getLang() }, l.name)));
   // Label is in all languages so someone can find it even if the wrong language is showing.
-  return field('🌐 Language · Taal · Ulimi', sel);
+  return field([icon('globe', { cls: 'title-icon' }), 'Language · Taal · Ulimi'], sel);
 }
 
 function brand() {
@@ -75,7 +76,7 @@ export function onboarding(ctx) {
     brand(),
     langPicker(ctx),
     h('section', { class: 'card' }, h('h2', { text: t('gate.whatTitle') }), bulletList(list('gate.what'))),
-    h('section', { class: 'card highlight' }, h('h2', { text: t('gate.privateTitle') }), h('p', { text: t('gate.privateBody') })),
+    h('section', { class: 'card highlight' }, h('h2', {}, withIcon('lock', t('gate.privateTitle'))), h('p', { text: t('gate.privateBody') })),
     h('form', { class: 'card', novalidate: true, 'aria-labelledby': 'ob-h', on: { submit: onSubmit } },
       h('h2', { id: 'ob-h', text: t('gate.setupTitle') }),
       field(t('gate.name'), name, t('gate.nameHint')),

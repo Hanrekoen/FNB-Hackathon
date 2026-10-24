@@ -3,9 +3,10 @@ import { test } from 'node:test';
 import { summarize } from '../js/core/budget.js';
 import { pendingReleases } from '../js/core/buckets.js';
 import { generateDemo } from '../js/core/demo.js';
+import { goalPlan } from '../js/core/goals.js';
 import { normalize } from '../js/core/schema.js';
 
-const names = { rent: 'Rent', data: 'Data', taxi: 'Taxi', registration: 'Fee', emergency: 'Emergency fund', releaseReason: 'Airtime' };
+const names = { rent: 'Rent', data: 'Data', taxi: 'Taxi', registration: 'Fee', emergency: 'Emergency fund', releaseReason: 'Airtime', holiday: 'Holiday' };
 const make = (today) => generateDemo({ today, now: new Date(`${today}T12:00`).getTime(), names, profileName: 'Lerato' });
 
 // A spread of days: month ends, a leap day, year end, and every weekday
@@ -32,6 +33,12 @@ for (const today of DAYS) {
     const spending = d.transactions.filter((t) => t.type === 'out' && !t.billId).length;
     assert.ok(spending >= 25 && spending <= 60, `${spending} expenses`);
     assert.equal(d.goals.filter((g) => g.kind === 'emergency').length, 1);
+
+    const holiday = d.goals.find((g) => g.by);
+    const plan = goalPlan(d, holiday, today);
+    assert.equal(plan.status, 'stretch', `holiday goal is ${plan.status}`);
+    assert.ok(plan.cuts.length > 0, 'shows cut suggestions');
+    assert.ok(plan.saved > 0 && plan.saved <= 40_000, `saved ${plan.saved}`);
   });
 }
 

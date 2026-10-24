@@ -455,3 +455,25 @@ html.privacy #app { filter: blur(18px); }
 @media (max-width: 360px) {
   .bucket-legend { grid-template-columns: 1fr; }
 }
+
+/* Inline SVG icons inherit the text colour, so they follow dark and high-contrast modes. */
+.icon { width: 1.2em; height: 1.2em; flex: none; vertical-align: -0.2em; }
+.title-icon { margin-right: 0.4em; }
+.tab-icon .icon { width: 24px; height: 24px; display: block; }
+.icon-btn .icon { width: 22px; height: 22px; }
+.tx-icon { display: inline-flex; color: var(--muted); }
+.alert .title-icon, .badge .title-icon { vertical-align: -0.25em; }
+
+/* Goal status: colour is always paired with an icon and words. */
+.goal-plan { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.goal-plan .row { margin: 8px 0; }
+.goal-status { display: flex; align-items: flex-start; gap: 2px; border-radius: 12px; padding: 10px 12px; font-weight: 600; border: 2px solid; }
+.goal-status .title-icon { margin-top: 0.1em; }
+.goal-status.ok { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+.goal-status.warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+.goal-status.danger { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
+.goal-status.neutral { background: var(--brand-soft); color: var(--text); border-color: var(--line); }
+.goal-accepted { margin: 12px 0; padding: 12px; border-radius: 12px; background: var(--brand-soft); }
+.goal-accepted h3 { display: flex; align-items: center; }
+.goal-date { margin: 8px 0; }
+.goal-date summary { font-weight: 600; }

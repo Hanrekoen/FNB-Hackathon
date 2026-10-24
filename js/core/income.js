@@ -36,6 +36,26 @@ export function median(xs) {
   return s.length % 2 ? s[mid] : Math.round((s[mid - 1] + s[mid]) / 2);
 }
 
+/**
+ * A careful monthly income: the 25th percentile of rolling 30-day income totals over the last
+ * 90 days. Rolling totals work for any mix of sources, where a percentile of single payments
+ * would mistake a small side payment for a whole month's income.
+ */
+export function cautiousMonthlyIncome(txs, today) {
+  const from = addDays(today, -90);
+  const incomes = txs.filter((t) => t.type === 'in' && t.date > from && t.date <= today);
+  const first = incomes.map((t) => t.date).sort()[0];
+  if (!first) return 0;
+  const totals = [];
+  for (let end = addDays(first, 29); end <= today; end = addDays(end, 1)) {
+    const start = addDays(end, -30);
+    totals.push(incomes.reduce((a, t) => (t.date > start && t.date <= end ? a + t.amount : a), 0));
+  }
+  if (totals.length) return percentile(totals, 25);
+  // Under 30 days of history, what has come in so far counts as the month; scaling up would guess high.
+  return incomes.reduce((a, t) => a + t.amount, 0);
+}
+
 function monthlyPayday(year, month, payDay) {
   const d = new Date(year, month, Math.min(payDay, daysInMonth(year, month)));
   // Employers usually pay on the last working day before a weekend payday.

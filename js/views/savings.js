@@ -3,13 +3,15 @@ import {
   DAY_MS, EMERGENCY_STARTER, NOTICE_DAYS, cancelRelease, checkRelease, needsAvailable, pendingReleases, releaseWarning, requestRelease,
   safetyConsequence, setAside,
 } from '../core/buckets.js';
-import { todayISO } from '../core/dates.js';
+import { addDays, isISODate, todayISO } from '../core/dates.js';
+import { goalPlan } from '../core/goals.js';
 import { parseAmount } from '../core/money.js';
 import { SAVE_PERCENTS } from '../core/schema.js';
 import { h } from '../dom.js';
 import { list, t } from '../i18n.js';
+import { icon } from '../icons.js';
 import {
-  amountInput, bucketBar, bulletList, card, field, fmtDate, fmtDateTime, formError, money, newId, pageTitle, select, showError, stat,
+  amountInput, bucketBar, bulletList, card, field, fmtDate, fmtDateTime, formError, money, newId, pageTitle, select, showError, stat, withIcon,
 } from './ui.js';
 
 export function render(ctx) {
@@ -28,7 +30,7 @@ export function render(ctx) {
     goals.map((g) => goalCard(ctx, g, cash, today)),
     !goals.length && starterCard(ctx, s),
     newGoalCard(ctx),
-    card(t('save.tipsTitle'), bulletList(list('tips.save'))));
+    card(withIcon('bulb', t('save.tipsTitle')), bulletList(list('tips.save'))));
 }
 
 function needsCard(ctx, s, today) {
@@ -130,15 +132,137 @@ function goalCard(ctx, g, cash, today) {
     h('div', { class: 'row-between' },
       h('h2', { id: hid }, h('span', { class: 'swatch seg-safety', 'aria-hidden': 'true' }), g.name),
       h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('save.delete', { goal: g.name }), on: { click: remove } },
-        h('span', { 'aria-hidden': 'true', text: '🗑️' }))),
+        icon('trash'))),
     h('progress', { max: g.target, value: Math.min(g.saved, g.target), 'aria-label': t('save.progress', { pct }) }),
     h('p', { text: t('save.ofTarget', { saved: money(g.saved), target: money(g.target), pct }) }),
-    g.saved >= g.target && h('p', { class: 'alert ok', text: t('save.reached') }),
+    g.saved >= g.target && h('p', { class: 'alert ok' }, withIcon('party', t('save.reached'))),
+    planSection(ctx, g, today),
+    dateEditor(ctx, g, today),
     field(t('save.amount'), amount),
     err,
     h('div', { class: 'row' },
       h('button', { class: 'btn', type: 'submit' }, t('save.add')),
       g.saved > 0 && h('button', { class: 'btn secondary', type: 'button', on: { click: () => move('withdraw') } }, t('save.withdraw'))));
+}
+
+const STATUS = {
+  onTrack: ['ok', 'check'],
+  stretch: ['warn', 'alert'],
+  unrealistic: ['danger', 'stop'],
+  unknown: ['neutral', 'info'],
+  pastDue: ['warn', 'calendar'],
+};
+
+function cutList(cuts) {
+  return h('ul', { class: 'bullets' }, cuts.map((c) => h('li', {
+    text: t('goals.cut', { cut: money(c.cut), category: t(`cat.${c.category}`), current: money(c.current) }),
+  })));
+}
+
+/** The numbers behind a goal's status, so nothing is a black box. */
+function howWeWorkedItOut(p) {
+  const c = p.capacity;
+  if (!c) return null;
+  const rows = [
+    ['goals.num.income', c.income],
+    ['goals.num.essentials', c.essentials],
+    ['goals.num.spending', c.spending],
+    ['goals.num.emergency', c.emergency],
+    ['goals.num.other', c.otherGoals],
+    ['goals.num.left', c.available],
+    p.monthlyNeed !== undefined && ['goals.num.need', p.monthlyNeed],
+  ].filter(Boolean);
+  return h('details', {},
+    h('summary', { text: t('forecast.how') }),
+    h('p', { class: 'hint', text: t('goals.num.lead') }),
+    h('ul', { class: 'plain' }, rows.map(([key, amount]) => h('li', { text: t(key, { amount: money(amount) }) }))));
+}
+
+/** Per-payday amount, whether it fits, and ways to make it fit. Guidance only: the user decides. */
+function planSection(ctx, g, today) {
+  const p = goalPlan(ctx.data, g, today);
+  if (!p || p.status === 'reached') return null;
+  const change = (mutate, message) => ctx.commit((d) => {
+    const goal = d.goals.find((x) => x.id === g.id);
+    if (goal) mutate(goal);
+  }, message);
+  const usePlan = (cuts) => change((goal) => {
+    goal.plan = { cuts, perContribution: p.perContribution, acceptedAt: Date.now() };
+  }, t('goals.planSaved'));
+  const usePlanBtn = (cuts) => !g.plan && h('button', { class: 'btn small', type: 'button', on: { click: () => usePlan(cuts) } }, t('goals.usePlan'));
+
+  const alt = p.alternatives;
+  const moveBtn = alt?.earliestFeasibleDate && h('button', {
+    class: 'btn small secondary', type: 'button',
+    on: { click: () => change((goal) => { goal.by = alt.earliestFeasibleDate; delete goal.plan; }, t('goals.dateMoved', { date: fmtDate(alt.earliestFeasibleDate) })) },
+  }, t('goals.moveDate', { date: fmtDate(alt.earliestFeasibleDate) }));
+  const lowerBtn = alt && p.status !== 'pastDue' && alt.maxAffordable > p.saved && h('button', {
+    class: 'btn small secondary', type: 'button',
+    on: { click: () => change((goal) => { goal.target = alt.maxAffordable; delete goal.plan; }, t('goals.lowered', { amount: money(alt.maxAffordable) })) },
+  }, t('goals.lower', { amount: money(alt.maxAffordable) }));
+
+  const [cls, iconName] = STATUS[p.status];
+  const statusText = {
+    onTrack: () => t('goals.onTrack'),
+    stretch: () => t('goals.stretch', { gap: money(p.gap) }),
+    unrealistic: () => (p.limitedBy === 'spending'
+      ? t('goals.unrealistic', { need: money(p.monthlyNeed), left: money(Math.max(0, p.capacity.available)) })
+      : t('goals.unrealisticIncome', { need: money(p.monthlyNeed) })),
+    unknown: () => t('goals.unknown'),
+    pastDue: () => t('goals.pastDue', { remaining: money(p.remaining) }),
+  }[p.status]();
+  const cutsTotal = (p.cuts ?? []).reduce((a, c) => a + c.cut, 0);
+  const perKey = p.unit === 'week' ? 'goals.perWeek' : 'goals.perPayday';
+
+  return h('div', { class: 'goal-plan' },
+    p.perContribution !== undefined && h('p', {
+      class: 'big-fact',
+      text: t(perKey, { amount: money(p.perContribution), monthly: money(p.monthlyNeed), target: money(g.target), date: fmtDate(g.by) }),
+    }),
+    h('p', { class: `goal-status ${cls}` }, icon(iconName, { cls: 'title-icon' }), statusText),
+    p.status === 'stretch' && [cutList(p.cuts), h('p', { class: 'hint', text: t('goals.cutsTotal', { amount: money(cutsTotal) }) }), usePlanBtn(p.cuts)],
+    p.status === 'unrealistic' && p.cuts.length > 0 && [
+      h('h3', { text: t('goals.waysToSave') }),
+      cutList(p.cuts),
+      h('p', { class: 'hint', text: `${t('goals.cutsTotal', { amount: money(cutsTotal) })} ${t('goals.cutBackNote')}` }),
+    ],
+    p.status === 'unrealistic' && !alt.earliestFeasibleDate
+      && h('p', { class: 'hint', text: t(p.capacity.otherGoals > 0 ? 'goals.noDateOtherGoals' : 'goals.noDate') }),
+    (p.status === 'unrealistic' || p.status === 'pastDue') && h('div', { class: 'row' }, moveBtn, lowerBtn),
+    g.plan && h('div', { class: 'goal-accepted' },
+      h('h3', {}, withIcon('target', t('goals.planTitle'))),
+      h('p', { text: t(p.unit === 'week' ? 'goals.planPerWeek' : 'goals.planPerPayday', { amount: money(g.plan.perContribution) }) }),
+      g.plan.cuts.length > 0 && cutList(g.plan.cuts),
+      h('button', { class: 'btn small secondary', type: 'button', on: { click: () => change((goal) => { delete goal.plan; }, t('goals.planDropped')) } }, t('goals.dropPlan'))),
+    howWeWorkedItOut(p));
+}
+
+/** Add, change or remove a goal's target date. The emergency fund never has one: it's for any time. */
+function dateEditor(ctx, g, today) {
+  if (g.kind === 'emergency') return null;
+  const input = h('input', { type: 'date', min: addDays(today, 1), value: g.by ?? '' });
+  const err = formError();
+  const set = (by, message) => ctx.commit((d) => {
+    const goal = d.goals.find((x) => x.id === g.id);
+    if (!goal) return;
+    if (by) goal.by = by;
+    else delete goal.by;
+    // A saved plan was worked out for the old date.
+    delete goal.plan;
+  }, message);
+  const save = () => {
+    if (!isISODate(input.value) || input.value <= today) return showError(err, t('err.goalDate'), input);
+    set(input.value, t('goals.dateSaved', { date: fmtDate(input.value) }));
+  };
+  // The goal card is a form whose submit adds savings, so Enter here must save the date instead.
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
+  return h('details', { class: 'goal-date' },
+    h('summary', {}, withIcon('calendar', t(g.by ? 'goals.dateChange' : 'goals.dateAdd'))),
+    field(t('goals.dateLabel'), input, t('save.byWhenHint')),
+    err,
+    h('div', { class: 'row' },
+      h('button', { class: 'btn small', type: 'button', on: { click: save } }, t('goals.dateSave')),
+      g.by && h('button', { class: 'btn small secondary', type: 'button', on: { click: () => set(null, t('goals.dateRemoved')) } }, t('goals.dateRemove'))));
 }
 
 function starterCard(ctx, s) {
@@ -153,6 +277,8 @@ function starterCard(ctx, s) {
 function newGoalCard(ctx) {
   const name = h('input', { type: 'text', id: 'goal-name', maxlength: 40, autocomplete: 'off' });
   const target = amountInput({ id: 'goal-target' });
+  const today = todayISO();
+  const by = h('input', { type: 'date', id: 'goal-by', min: addDays(today, 1) });
   const err = formError();
 
   async function onSubmit(e) {
@@ -161,15 +287,19 @@ function newGoalCard(ctx) {
     const cents = parseAmount(target.value);
     if (!n) return showError(err, t('err.name'), name);
     if (!cents) return showError(err, t('err.amount'), target);
-    await ctx.commit((d) => { d.goals.push({ id: newId(), name: n.slice(0, 40), target: cents, kind: 'goal' }); }, t('save.created'));
+    if (by.value && (!isISODate(by.value) || by.value <= today)) return showError(err, t('err.goalDate'), by);
+    const goal = { id: newId(), name: n.slice(0, 40), target: cents, kind: 'goal' };
+    if (by.value) goal.by = by.value;
+    await ctx.commit((d) => { d.goals.push(goal); }, t('save.created'));
   }
 
   return h('section', { class: 'card' },
-    h('details', {},
+    h('details', { open: !ctx.data.goals.some((g) => g.kind !== 'emergency') },
       h('summary', { text: t('save.newTitle') }),
       h('form', { novalidate: true, on: { submit: onSubmit } },
         field(t('save.goalName'), name, t('save.goalNameHint')),
         field(t('save.goalTarget'), target),
+        field(t('save.byWhen'), by, t('save.byWhenHint')),
         err,
         h('button', { class: 'btn', type: 'submit' }, t('save.create')))));
 }
