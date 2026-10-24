@@ -2,6 +2,7 @@ import { summarize } from '../core/budget.js';
 import { addDays, dayOfYear, todayISO } from '../core/dates.js';
 import { runOutForecast, spendingPace, weekdayInsight } from '../core/forecast.js';
 import { NUDGE_SNOOZE_DAYS, patternMismatch } from '../core/income.js';
+import { weekIndex } from '../core/scam-advice.js';
 import { h } from '../dom.js';
 import { list, t } from '../i18n.js';
 import { loadExample } from './example.js';
@@ -51,9 +52,19 @@ export function render(ctx) {
       txList(ctx, sortTx(d.transactions).slice(0, 5), false),
       h('a', { class: 'link', href: '#/money' }, t('home.seeAll'))),
 
+    scamWeekCard(today),
+
     h('section', { class: 'card tip' },
       h('h2', {}, withIcon('bulb', t('home.tip'))),
       h('p', { text: tips[dayOfYear(today) % tips.length] })));
+}
+
+function scamWeekCard(today) {
+  const scams = list('scam.weekly');
+  return h('section', { class: 'card tip warn' },
+    heading('h2', ['message-square-warning', t('home.scamWeek')]),
+    h('p', { text: scams[weekIndex(dayOfYear(today), scams.length)] }),
+    h('a', { class: 'link', href: '#/scams' }, t('home.scamCheck')));
 }
 
 function exampleCard(ctx) {

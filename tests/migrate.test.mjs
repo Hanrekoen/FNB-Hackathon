@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SCHEMA_VERSION, normalize } from '../js/core/schema.js';
+import { SCAM_LOG_MAX, SCHEMA_VERSION, normalize } from '../js/core/schema.js';
 
 const TODAY = '2026-10-24';
 
@@ -19,7 +19,7 @@ const v1 = {
   createdAt: '2026-09-01',
 };
 
-test('v1 data migrates to v2 without losing anything', () => {
+test('v1 data migrates to the current version without losing anything', () => {
   const d = normalize(structuredClone(v1), TODAY);
   assert.equal(d.v, SCHEMA_VERSION);
   assert.equal(d.profile.name, 'Sipho');
@@ -103,4 +103,23 @@ test('garbage input becomes empty data', () => {
     assert.equal(d.v, SCHEMA_VERSION);
     assert.deepEqual([d.transactions, d.bills, d.goals, d.releases], [[], [], [], []]);
   }
+});
+
+test('saved scam checks and income links are validated', () => {
+  const ok = { id: 's1', date: '2026-10-20', level: 'high', matches: ['secret', 42], text: 'x'.repeat(900), wrong: 'yes' };
+  const d = normalize({
+    transactions: [
+      { id: 'n', type: 'needs', amount: 100, date: TODAY, category: 'needs', fromIncome: 'pay' },
+      { id: 'r', type: 'release', amount: 100, date: TODAY, category: 'release', correction: 'true', fromIncome: 7 },
+    ],
+    scamLog: [ok, { ...ok, level: 'scary' }, { ...ok, date: 'yesterday' }, { ...ok, text: null }, ...Array(40).fill(ok)],
+  }, TODAY);
+  assert.equal(d.transactions[0].fromIncome, 'pay');
+  assert.ok(!('fromIncome' in d.transactions[1]));
+  assert.ok(!('correction' in d.transactions[1]));
+  assert.equal(d.scamLog.length, SCAM_LOG_MAX);
+  assert.deepEqual(d.scamLog[0].matches, ['secret']);
+  assert.equal(d.scamLog[0].text.length, 500);
+  assert.equal(d.scamLog[0].wrong, false);
+  assert.deepEqual(normalize({ v: 2 }, TODAY).scamLog, []);
 });

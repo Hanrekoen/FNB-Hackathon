@@ -66,8 +66,9 @@ export function generateDemo({ today, now, names, profileName = '', newId }) {
   for (let d = start; d <= today; d = addDays(d, 1)) {
     const income = incomes.get(d);
     if (income) {
-      data.transactions.push({ id: id(), type: 'in', amount: income.amount, category: income.category, note: '', date: d });
-      applyAllocation(data, allocate(data, income.amount, d), d, names.emergency, id);
+      const incomeId = id();
+      data.transactions.push({ id: incomeId, type: 'in', amount: income.amount, category: income.category, note: '', date: d });
+      applyAllocation(data, allocate(data, income.amount, d, incomeId), d, names.emergency, id);
     }
     for (const bill of [...data.bills]) {
       if (bill.frequency === 'once' || billNextDue(bill, d) !== d) continue;

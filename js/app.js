@@ -1,9 +1,11 @@
 import { settleReleases } from './core/buckets.js';
 import { todayISO } from './core/dates.js';
 import { formatMoney } from './core/money.js';
+import { MAX_LEN } from './core/scam.js';
 import { h } from './dom.js';
 import { icon } from './icons.js';
 import { locale, t } from './i18n.js';
+import { icon } from './icons.js';
 import { applyPrefs, loadPrefs, savePrefs } from './prefs.js';
 import * as vault from './vault.js';
 import * as budget from './views/budget.js';
@@ -58,6 +60,23 @@ function confirmDialog(message, { ok = t('action.ok'), cancel = t('action.cancel
   });
 }
 
+/** Like confirmDialog, with several labelled choices. Resolves to the chosen value, or '' if dismissed. */
+function chooseDialog(message, choices) {
+  return new Promise((resolve) => {
+    const dlg = h('dialog', { class: 'dialog', 'aria-describedby': 'dlg-msg' },
+      h('p', { id: 'dlg-msg', text: message }),
+      h('div', { class: 'row end' }, choices.map((c) => h('button', {
+        type: 'button', class: `btn ${c.secondary ? 'secondary' : ''}`, on: { click: () => dlg.close(c.value) },
+      }, c.label))));
+    dlg.addEventListener('close', () => {
+      resolve(dlg.returnValue);
+      dlg.remove();
+    });
+    document.body.append(dlg);
+    dlg.showModal();
+  });
+}
+
 function setPrefs(patch) {
   prefs = { ...prefs, ...patch };
   savePrefs(prefs);
@@ -73,6 +92,7 @@ const ctx = {
   setPrefs,
   toast,
   confirm: confirmDialog,
+  choose: chooseDialog,
   lock: () => lockApp(),
   restart: (message) => { lockApp(); if (message) toast(message); },
   install: {
@@ -230,11 +250,24 @@ function unsupported() {
     h('p', { class: 'alert danger', text: t('err.insecure') })));
 }
 
+/**
+ * A message shared to Imali from another app (Web Share Target) arrives in the URL. Take it
+ * out at once so it isn't kept in browser history, and check it once the app is unlocked.
+ */
+function takeSharedText() {
+  if (!location.search) return;
+  const q = new URLSearchParams(location.search);
+  const text = ['title', 'text', 'url'].map((k) => q.get(k)).filter(Boolean).join('\n').trim();
+  history.replaceState(null, '', `${location.pathname}${text ? '#/scams' : location.hash}`);
+  if (text) ctx.flash.scam = { text: text.slice(0, MAX_LEN) };
+}
+
 // ---------- start ----------
 
 function start() {
   applyPrefs(prefs);
   if (!window.isSecureContext || !crypto?.subtle || !window.indexedDB) return unsupported();
+  takeSharedText();
   registerServiceWorker();
   navigator.storage?.persist?.().catch(() => {});
   watchActivity();

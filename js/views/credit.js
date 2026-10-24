@@ -5,6 +5,7 @@ import { assessLoan, loanCost } from '../core/credit.js';
 import { todayISO } from '../core/dates.js';
 import { centsToInput, parseAmount, parseOptionalAmount, parsePercent } from '../core/money.js';
 import { h } from '../dom.js';
+import { icon } from '../icons.js';
 import { list, t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { amountInput, bulletList, card, field, formError, money, pageTitle, showError, stat, withIcon } from './ui.js';
@@ -13,7 +14,10 @@ const LEVEL_ICON = { ok: 'check', caution: 'alert', danger: 'stop' };
 
 export function render(ctx) {
   const est = monthlyIncomeEstimate(ctx.data.transactions, todayISO());
-  const principal = amountInput({ id: 'loan-amount' });
+  // Set when the scam check sends a loan offer here, so its amount is filled in.
+  const offered = ctx.flash.loanAmount;
+  delete ctx.flash.loanAmount;
+  const principal = amountInput({ id: 'loan-amount', value: offered ? centsToInput(offered) : '' });
   const rate = h('input', { id: 'loan-rate', type: 'text', inputmode: 'decimal', autocomplete: 'off', maxlength: 8, placeholder: '27.5' });
   const months = h('input', { id: 'loan-months', type: 'number', inputmode: 'numeric', min: 1, max: 360 });
   const initFee = amountInput({ id: 'loan-init', placeholder: '0' });

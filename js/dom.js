@@ -3,7 +3,8 @@
 // enforces Trusted Types, which makes innerHTML-style sinks throw.
 
 const BLOCKED_ATTR = /^(on|style$|srcdoc$|formaction$|action$)/i;
-const SAFE_URL = /^(#|\.\/|blob:)/;
+// In-app links, downloads, and tap-to-call links to fixed numbers (digits only).
+const SAFE_URL = /^(#|\.\/|blob:|tel:\+?\d{3,15}$)/;
 
 export function h(tag, props, ...children) {
   const el = document.createElement(tag);

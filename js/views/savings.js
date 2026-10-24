@@ -8,6 +8,7 @@ import { goalPlan } from '../core/goals.js';
 import { parseAmount } from '../core/money.js';
 import { SAVE_PERCENTS } from '../core/schema.js';
 import { h } from '../dom.js';
+import { icon } from '../icons.js';
 import { list, t } from '../i18n.js';
 import { icon } from '../icons.js';
 import {

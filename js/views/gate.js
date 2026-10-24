@@ -2,6 +2,7 @@
 
 import { checkNewSecret } from '../core/security.js';
 import { h } from '../dom.js';
+import { icon } from '../icons.js';
 import { LANGS, getLang, list, t } from '../i18n.js';
 import { icon } from '../icons.js';
 import * as vault from '../vault.js';
@@ -39,7 +40,10 @@ function langPicker(ctx) {
   const sel = h('select', { id: 'lang', on: { change: () => ctx.setLang(sel.value) } },
     LANGS.map((l) => h('option', { value: l.code, selected: l.code === getLang() }, l.name)));
   // Label is in all languages so someone can find it even if the wrong language is showing.
-  return field([icon('globe', { cls: 'title-icon' }), 'Language · Taal · Ulimi'], sel);
+  const f = field('Language · Taal · Ulimi', sel);
+  f.querySelector('label').classList.add('with-icon');
+  f.querySelector('label').prepend(icon('globe'));
+  return f;
 }
 
 function brand() {

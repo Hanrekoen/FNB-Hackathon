@@ -1,9 +1,11 @@
+import { deleteTransaction } from '../core/buckets.js';
 import { ICONS } from '../core/categories.js';
-import { parseISO } from '../core/dates.js';
+import { parseISO, todayISO } from '../core/dates.js';
 import { formatMoney } from '../core/money.js';
 import { h } from '../dom.js';
 import { icon } from '../icons.js';
 import { locale, t } from '../i18n.js';
+import { icon } from '../icons.js';
 
 export const money = (cents) => formatMoney(cents, locale());
 export const newId = () => crypto.randomUUID();
@@ -116,6 +118,14 @@ export function card(title, ...children) {
   return h('section', { class: 'card' }, h('h2', {}, title), children);
 }
 
+export function heading(tag, title, props = {}) {
+  const [name, text] = Array.isArray(title) ? title : [null, title];
+  const cls = [props.class, name && 'with-icon'].filter(Boolean).join(' ');
+  return h(tag, { ...props, class: cls || null }, name && icon(name), text);
+}
+
+export const trashIcon = () => icon('trash-2');
+
 export function bulletList(items) {
   return h('ul', { class: 'bullets' }, items.map((x) => h('li', { text: x })));
 }
@@ -133,7 +143,7 @@ export function txTitle(tx, goals) {
   if (tx.type === 'save') return t('tx.save', { goal });
   if (tx.type === 'withdraw') return t('tx.withdraw', { goal });
   if (tx.type === 'needs') return t('tx.needs');
-  if (tx.type === 'release') return t('tx.release');
+  if (tx.type === 'release') return t(tx.correction ? 'tx.correction' : 'tx.release');
   return t(`cat.${tx.category}`);
 }
 
@@ -150,8 +160,16 @@ export function txList(ctx, txs, withDelete) {
     const title = txTitle(tx, goals);
     const meta = [fmtDate(tx.date), tx.note].filter(Boolean).join(' · ');
     const remove = async () => {
-      if (await ctx.confirm(t('tx.confirmDelete', { what: title, amount: money(tx.amount) }), { danger: true, ok: t('action.delete') })) {
-        ctx.commit((d) => { d.transactions = d.transactions.filter((x) => x.id !== tx.id); }, t('tx.deleted'));
+      // Work out on a copy what else the delete changes, so the user sees it before confirming.
+      const preview = deleteTransaction(structuredClone(ctx.data), tx.id, todayISO(), () => 'preview');
+      const linked = preview.linked.reduce((a, x) => a + x.amount, 0);
+      const message = [
+        t('tx.confirmDelete', { what: title, amount: money(tx.amount) }),
+        linked > 0 && t('tx.deleteLinked', { amount: money(linked) }),
+        preview.corrected > 0 && t('tx.deleteCorrects', { amount: money(preview.corrected) }),
+      ].filter(Boolean).join('\n\n');
+      if (await ctx.confirm(message, { danger: true, ok: t('action.delete') })) {
+        ctx.commit((d) => deleteTransaction(d, tx.id, todayISO(), newId), t('tx.deleted'));
       }
     };
     return h('li', { class: 'tx' },
