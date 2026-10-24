@@ -1,0 +1,12 @@
+# Netlify reads this on every deploy from the repo and it overrides the dashboard settings.
+# Only the app is published (dist/), never tests, scripts, docs or .git. If a test fails,
+# the deploy fails and the previous version stays live.
+
+[build]
+  command = "npm test && npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Security headers come from dist/_headers (copied there by the build).
