@@ -241,7 +241,7 @@ This copies only the files the app needs into `dist/`. `dist/` is git-ignored.
 4. Turn on flight mode and open the app: it still works.
 
 ### When you change app files
-- Bump `VERSION` in [sw.js](sw.js) (it is `imali-v3` now) so installed copies pick up the new files.
+- **You don't need to bump the cache version.** `npm run build`, which Netlify runs, stamps `VERSION` in `dist/sw.js` with a fingerprint of every app file, so installed copies update whenever anything changes. Only bump `VERSION` in [sw.js](sw.js) by hand if you test an installed copy from `npm start`.
 - If you add a new file under `js/`, `css/` or `icons/`, add it to the `ASSETS` list in `sw.js`. `npm test` fails if you forget.
 - If you add a new piece of text, add its key to all three files in `js/lang/`. `npm test` fails if a key or placeholder is missing.
 - **Adding a scam rule:** add it to `RULES` in [js/core/scam.js](js/core/scam.js) with `en`, `af` and `zu` patterns (bounded repetition only), add `scam.r.<id>` and `scam.ex.<id>` in all three languages, then run `npm test` and `npm run scam-report`. The tests check that each example really triggers its rule.

@@ -50,7 +50,7 @@ npm run icons      # regenerate PNG icons
 
 **For judges:** create any PIN, choose how you're paid (or skip), then tap **Load example data** on Home for a realistic month. Settings → Example data clears it.
 
-When you change any app file, bump `VERSION` in [sw.js](sw.js) so installed copies update. `npm test` fails if a file is missing from the offline cache list.
+`npm run build` (which Netlify runs) stamps the offline cache version with a fingerprint of the app files, so installed copies update after every deploy that changes something. `npm test` fails if a file is missing from the offline cache list.
 
 ## Project layout
 
