@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { needsBalance, safetyBalance, summarize } from '../js/core/budget.js';
+import { cashAvailable, needsBalance, safetyBalance, summarize } from '../js/core/budget.js';
 import {
-  DAY_MS, allocate, applyAllocation, cancelRelease, checkRelease, needsAvailable, payBill, releaseWarning, requestRelease,
-  safetyConsequence, settleReleases,
+  DAY_MS, allocate, applyAllocation, cancelRelease, checkRelease, deleteTransaction, needsAvailable, payBill, releaseWarning,
+  requestRelease, safetyConsequence, settleReleases,
 } from '../js/core/buckets.js';
 import { emptyData } from '../js/core/schema.js';
 
@@ -167,5 +167,48 @@ describe('safety withdrawal consequence', () => {
 
   test('without bills or spending, days are unknown', () => {
     assert.deepEqual(safetyConsequence(emptyData('', TODAY), 1_000, TODAY), { before: 0, after: 0, daysBefore: null, daysAfter: null });
+  });
+});
+
+describe('deleting an income after its split', () => {
+  /** The bug report: R2 000 in, split applied (R1 200 to Needs for rent), then the income is deleted. */
+  function splitThenDelete(linkIncome) {
+    const d = emptyData('', TODAY);
+    d.bills = [{ id: 'rent', name: 'Rent', amount: 120_000, frequency: 'monthly', dueDay: 10, amountType: 'fixed', lastPaidDue: null }];
+    d.nextIncome = '2026-11-16';
+    const income = { id: 'pay', type: 'in', amount: 200_000, category: 'wages', note: '', date: TODAY };
+    d.transactions.push(income);
+    const plan = allocate(d, 200_000, TODAY, linkIncome ? 'pay' : null);
+    applyAllocation(d, plan, TODAY, 'Emergency fund', id);
+    assert.equal(needsBalance(d.transactions), 120_000);
+    return { d, result: deleteTransaction(d, 'pay', TODAY, id) };
+  }
+
+  test('removes the Needs and Safety moves made from that income', () => {
+    const { d, result } = splitThenDelete(true);
+    assert.equal(result.linked.length, 2);
+    assert.equal(result.corrected, 0);
+    const s = summarize(d, TODAY);
+    assert.deepEqual([s.cash, s.needs, s.safety, s.free], [0, 0, 0, 0]);
+    assert.equal(d.transactions.length, 0);
+  });
+
+  test('older data without a link: Needs is trimmed to the cash really there', () => {
+    const { d, result } = splitThenDelete(false);
+    assert.deepEqual(result.linked, []);
+    assert.equal(result.corrected, 120_000);
+    assert.equal(needsBalance(d.transactions), 0);
+    assert.ok(needsBalance(d.transactions) <= Math.max(0, cashAvailable(d.transactions)));
+    assert.equal(d.transactions.at(-1).correction, true);
+  });
+
+  test('deleting other entries leaves Needs alone', () => {
+    const d = lerato();
+    applyAllocation(d, receive(d, 240_000), TODAY, 'Emergency fund', id);
+    const spend = { id: 'snack', type: 'out', amount: 2_000, category: 'food', note: '', date: TODAY };
+    d.transactions.push(spend);
+    const before = needsBalance(d.transactions);
+    assert.deepEqual(deleteTransaction(d, 'snack', TODAY, id), { linked: [], corrected: 0 });
+    assert.equal(needsBalance(d.transactions), before);
   });
 });

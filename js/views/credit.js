@@ -5,14 +5,18 @@ import { assessLoan, loanCost } from '../core/credit.js';
 import { todayISO } from '../core/dates.js';
 import { centsToInput, parseAmount, parseOptionalAmount, parsePercent } from '../core/money.js';
 import { h } from '../dom.js';
+import { icon } from '../icons.js';
 import { list, t } from '../i18n.js';
 import { amountInput, bulletList, card, field, formError, money, pageTitle, showError, stat } from './ui.js';
 
-const LEVEL_ICON = { ok: '✅', caution: '⚠️', danger: '⛔' };
+const LEVEL_ICON = { ok: 'circle-check', caution: 'triangle-alert', danger: 'octagon-x' };
 
 export function render(ctx) {
   const est = monthlyIncomeEstimate(ctx.data.transactions, todayISO());
-  const principal = amountInput({ id: 'loan-amount' });
+  // Set when the scam check sends a loan offer here, so its amount is filled in.
+  const offered = ctx.flash.loanAmount;
+  delete ctx.flash.loanAmount;
+  const principal = amountInput({ id: 'loan-amount', value: offered ? centsToInput(offered) : '' });
   const rate = h('input', { id: 'loan-rate', type: 'text', inputmode: 'decimal', autocomplete: 'off', maxlength: 8, placeholder: '27.5' });
   const months = h('input', { id: 'loan-months', type: 'number', inputmode: 'numeric', min: 1, max: 360 });
   const initFee = amountInput({ id: 'loan-init', placeholder: '0' });
@@ -53,14 +57,14 @@ export function render(ctx) {
       err,
       h('button', { class: 'btn', type: 'submit' }, t('credit.calc'))),
     out,
-    card(t('credit.flagsTitle'), bulletList(list('credit.flags'))),
-    card(t('credit.rightsTitle'), bulletList(list('credit.rights')), h('p', { class: 'hint', text: t('credit.disclaimer') })));
+    card(['flag', t('credit.flagsTitle')], bulletList(list('credit.flags'))),
+    card(['scale', t('credit.rightsTitle')], bulletList(list('credit.rights')), h('p', { class: 'hint', text: t('credit.disclaimer') })));
 }
 
 function resultCard(res, a) {
   return h('section', { class: `card result ${a.level}`, 'aria-labelledby': 'res-h' },
     h('h2', { id: 'res-h', tabindex: -1, text: t('credit.result') }),
-    h('p', { class: `badge ${a.level}` }, h('span', { 'aria-hidden': 'true', text: `${LEVEL_ICON[a.level]} ` }), t(`credit.level.${a.level}`)),
+    h('p', { class: `badge with-icon ${a.level}` }, icon(LEVEL_ICON[a.level]), t(`credit.level.${a.level}`)),
     h('div', { class: 'stats' },
       stat(t('credit.monthly'), money(res.monthly)),
       stat(t('credit.total'), money(res.total)),

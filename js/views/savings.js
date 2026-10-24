@@ -7,9 +7,10 @@ import { todayISO } from '../core/dates.js';
 import { parseAmount } from '../core/money.js';
 import { SAVE_PERCENTS } from '../core/schema.js';
 import { h } from '../dom.js';
+import { icon } from '../icons.js';
 import { list, t } from '../i18n.js';
 import {
-  amountInput, bucketBar, bulletList, card, field, fmtDate, fmtDateTime, formError, money, newId, pageTitle, select, showError, stat,
+  amountInput, bucketBar, bulletList, card, field, fmtDate, fmtDateTime, formError, money, newId, pageTitle, select, showError, stat, trashIcon,
 } from './ui.js';
 
 export function render(ctx) {
@@ -28,7 +29,7 @@ export function render(ctx) {
     goals.map((g) => goalCard(ctx, g, cash, today)),
     !goals.length && starterCard(ctx, s),
     newGoalCard(ctx),
-    card(t('save.tipsTitle'), bulletList(list('tips.save'))));
+    card(['lightbulb', t('save.tipsTitle')], bulletList(list('tips.save'))));
 }
 
 function needsCard(ctx, s, today) {
@@ -130,10 +131,10 @@ function goalCard(ctx, g, cash, today) {
     h('div', { class: 'row-between' },
       h('h2', { id: hid }, h('span', { class: 'swatch seg-safety', 'aria-hidden': 'true' }), g.name),
       h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('save.delete', { goal: g.name }), on: { click: remove } },
-        h('span', { 'aria-hidden': 'true', text: '🗑️' }))),
+        trashIcon())),
     h('progress', { max: g.target, value: Math.min(g.saved, g.target), 'aria-label': t('save.progress', { pct }) }),
     h('p', { text: t('save.ofTarget', { saved: money(g.saved), target: money(g.target), pct }) }),
-    g.saved >= g.target && h('p', { class: 'alert ok', text: t('save.reached') }),
+    g.saved >= g.target && h('p', { class: 'alert ok with-icon' }, icon('party-popper'), t('save.reached')),
     field(t('save.amount'), amount),
     err,
     h('div', { class: 'row' },

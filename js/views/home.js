@@ -2,10 +2,11 @@ import { summarize } from '../core/budget.js';
 import { addDays, dayOfYear, todayISO } from '../core/dates.js';
 import { runOutForecast, spendingPace, weekdayInsight } from '../core/forecast.js';
 import { NUDGE_SNOOZE_DAYS, patternMismatch } from '../core/income.js';
+import { weekIndex } from '../core/scam-advice.js';
 import { h } from '../dom.js';
 import { list, t } from '../i18n.js';
 import { loadExample } from './example.js';
-import { bucketBar, card, daysText, fmtDate, money, pageTitle, sortTx, txList, weekdayName } from './ui.js';
+import { bucketBar, card, daysText, fmtDate, heading, money, pageTitle, sortTx, txList, weekdayName } from './ui.js';
 
 const SOURCE_NOTE = { estimate: 'home.estimated', late: 'home.late', default: 'home.guess', payday: 'home.payday' };
 
@@ -51,9 +52,19 @@ export function render(ctx) {
       txList(ctx, sortTx(d.transactions).slice(0, 5), false),
       h('a', { class: 'link', href: '#/money' }, t('home.seeAll'))),
 
+    scamWeekCard(today),
+
     h('section', { class: 'card tip' },
-      h('h2', { text: t('home.tip') }),
+      heading('h2', ['lightbulb', t('home.tip')]),
       h('p', { text: tips[dayOfYear(today) % tips.length] })));
+}
+
+function scamWeekCard(today) {
+  const scams = list('scam.weekly');
+  return h('section', { class: 'card tip warn' },
+    heading('h2', ['message-square-warning', t('home.scamWeek')]),
+    h('p', { text: scams[weekIndex(dayOfYear(today), scams.length)] }),
+    h('a', { class: 'link', href: '#/scams' }, t('home.scamCheck')));
 }
 
 function exampleCard(ctx) {
@@ -81,7 +92,7 @@ function forecastCard(d, s, today) {
     ? t('forecast.onTrack')
     : t('forecast.runOut', { date: fmtDate(f.date), n: f.gap });
   return h('section', { class: `card forecast ${f.onTrack ? 'ok' : 'warn'}`, 'aria-labelledby': 'forecast-h' },
-    h('h2', { id: 'forecast-h', text: t('forecast.title') }),
+    heading('h2', ['telescope', t('forecast.title')], { id: 'forecast-h' }),
     h('p', { class: 'big-fact', text: message }),
     h('details', {},
       h('summary', { text: t('forecast.how') }),

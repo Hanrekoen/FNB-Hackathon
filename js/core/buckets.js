@@ -2,7 +2,7 @@
 // soft-guarded) and Free (what's left, which becomes safe-to-spend). Money never moves in a
 // bank here; these are amounts Imali keeps aside on the user's behalf.
 
-import { goalSaved, needsBalance, safetyBalance, summarize } from './budget.js';
+import { cashAvailable, goalSaved, needsBalance, safetyBalance, summarize } from './budget.js';
 import { addDays, toISO } from './dates.js';
 import { monthlyEquivalent } from './forecast.js';
 
@@ -28,8 +28,9 @@ export function safetyTarget(data) {
 /**
  * Split income that was just recorded: cover bills due before the next income first, then
  * the savings %, and the rest is free. Never sets aside more than the cash actually on hand.
+ * `incomeId` links the split to its income, so deleting the income can undo the split.
  */
-export function allocate(data, amount, today) {
+export function allocate(data, amount, today, incomeId = null) {
   const s = summarize(data, today);
   const room = Math.max(0, s.cash - s.needs);
   const needs = Math.min(amount, room, Math.max(0, s.billsTotal - needsAvailable(data)));
@@ -39,6 +40,7 @@ export function allocate(data, amount, today) {
   const safety = hasGoals && !target ? 0 : Math.min(room - needs, Math.floor((remaining * data.settings.savePercent) / 100));
   return {
     amount,
+    incomeId,
     needs,
     safety,
     free: remaining - safety,
@@ -50,15 +52,33 @@ export function allocate(data, amount, today) {
 }
 
 /** Records an allocation. Creates an emergency fund if the user has no goals yet. */
-export function applyAllocation(data, { needs, safety, goalId }, today, emergencyName, newId = defaultId) {
-  if (needs > 0) data.transactions.push({ id: newId(), type: 'needs', amount: needs, category: 'needs', note: '', date: today });
+export function applyAllocation(data, { needs, safety, goalId, incomeId = null }, today, emergencyName, newId = defaultId) {
+  const link = incomeId ? { fromIncome: incomeId } : {};
+  if (needs > 0) data.transactions.push({ id: newId(), type: 'needs', amount: needs, category: 'needs', note: '', date: today, ...link });
   if (safety <= 0) return;
   let id = goalId ?? safetyTarget(data)?.id ?? (data.goals.find((g) => g.kind === 'emergency') ?? data.goals[0])?.id;
   if (!id) {
     id = newId();
     data.goals.push({ id, name: emergencyName, target: EMERGENCY_STARTER, kind: 'emergency' });
   }
-  data.transactions.push({ id: newId(), type: 'save', amount: safety, goalId: id, category: 'save', note: '', date: today });
+  data.transactions.push({ id: newId(), type: 'save', amount: safety, goalId: id, category: 'save', note: '', date: today, ...link });
+}
+
+/**
+ * Deletes a transaction. Deleting an income also removes the Needs and Safety moves made from
+ * its split, and Needs is then trimmed so it never holds more than the cash really on hand
+ * (older data has no link, and money can't stay set aside if it was never there).
+ * Returns the linked moves removed and the amount trimmed from Needs.
+ */
+export function deleteTransaction(data, txId, today, newId = defaultId) {
+  const linked = data.transactions.filter((t) => t.fromIncome === txId);
+  const gone = new Set([txId, ...linked.map((t) => t.id)]);
+  data.transactions = data.transactions.filter((t) => !gone.has(t.id));
+  const excess = needsBalance(data.transactions) - Math.max(0, cashAvailable(data.transactions));
+  if (excess > 0) {
+    data.transactions.push({ id: newId(), type: 'release', amount: excess, category: 'release', note: '', date: today, correction: true });
+  }
+  return { linked, corrected: Math.max(0, excess) };
 }
 
 export function setAside(data, amount, today, newId = defaultId) {

@@ -1,8 +1,10 @@
 import { settleReleases } from './core/buckets.js';
 import { todayISO } from './core/dates.js';
 import { formatMoney } from './core/money.js';
+import { MAX_LEN } from './core/scam.js';
 import { h } from './dom.js';
 import { locale, t } from './i18n.js';
+import { icon } from './icons.js';
 import { applyPrefs, loadPrefs, savePrefs } from './prefs.js';
 import * as vault from './vault.js';
 import * as budget from './views/budget.js';
@@ -16,11 +18,11 @@ import * as settings from './views/settings.js';
 
 const ROUTES = { home, money: budget, save: savings, credit, scams, settings, profile };
 const TABS = [
-  ['home', '🏠'],
-  ['money', '💵'],
-  ['save', '🐷'],
-  ['credit', '💳'],
-  ['scams', '🛡️'],
+  ['home', 'house'],
+  ['money', 'wallet'],
+  ['save', 'piggy-bank'],
+  ['credit', 'credit-card'],
+  ['scams', 'shield-check'],
 ];
 
 const root = document.getElementById('app');
@@ -57,6 +59,23 @@ function confirmDialog(message, { ok = t('action.ok'), cancel = t('action.cancel
   });
 }
 
+/** Like confirmDialog, with several labelled choices. Resolves to the chosen value, or '' if dismissed. */
+function chooseDialog(message, choices) {
+  return new Promise((resolve) => {
+    const dlg = h('dialog', { class: 'dialog', 'aria-describedby': 'dlg-msg' },
+      h('p', { id: 'dlg-msg', text: message }),
+      h('div', { class: 'row end' }, choices.map((c) => h('button', {
+        type: 'button', class: `btn ${c.secondary ? 'secondary' : ''}`, on: { click: () => dlg.close(c.value) },
+      }, c.label))));
+    dlg.addEventListener('close', () => {
+      resolve(dlg.returnValue);
+      dlg.remove();
+    });
+    document.body.append(dlg);
+    dlg.showModal();
+  });
+}
+
 function setPrefs(patch) {
   prefs = { ...prefs, ...patch };
   savePrefs(prefs);
@@ -72,6 +91,7 @@ const ctx = {
   setPrefs,
   toast,
   confirm: confirmDialog,
+  choose: chooseDialog,
   lock: () => lockApp(),
   restart: (message) => { lockApp(); if (message) toast(message); },
   install: {
@@ -136,16 +156,16 @@ async function showGate() {
 
 function renderShell() {
   const nav = h('nav', { class: 'tabbar', 'aria-label': t('nav.label') },
-    TABS.map(([name, icon]) => h('a', { href: `#/${name}`, 'data-tab': name },
-      h('span', { class: 'tab-icon', 'aria-hidden': 'true', text: icon }),
+    TABS.map(([name, iconName]) => h('a', { href: `#/${name}`, 'data-tab': name },
+      icon(iconName),
       h('span', { class: 'tab-label', text: t(`nav.${name}`) }))));
   root.replaceChildren(
     h('header', { class: 'topbar' },
       h('a', { class: 'brand', href: '#/home' }, h('img', { src: './icons/icon.svg', alt: '', width: 28, height: 28 }), 'Imali'),
       h('div', { class: 'row' },
-        h('a', { class: 'icon-btn', href: '#/settings', 'aria-label': t('nav.settings') }, h('span', { 'aria-hidden': 'true', text: '⚙️' })),
+        h('a', { class: 'icon-btn', href: '#/settings', 'aria-label': t('nav.settings') }, icon('settings')),
         h('button', { class: 'icon-btn', type: 'button', 'aria-label': t('action.lock'), on: { click: () => lockApp() } },
-          h('span', { 'aria-hidden': 'true', text: '🔒' })))),
+          icon('lock')))),
     h('main', { id: 'main' }),
     nav);
   renderView(true);
@@ -229,11 +249,24 @@ function unsupported() {
     h('p', { class: 'alert danger', text: t('err.insecure') })));
 }
 
+/**
+ * A message shared to Imali from another app (Web Share Target) arrives in the URL. Take it
+ * out at once so it isn't kept in browser history, and check it once the app is unlocked.
+ */
+function takeSharedText() {
+  if (!location.search) return;
+  const q = new URLSearchParams(location.search);
+  const text = ['title', 'text', 'url'].map((k) => q.get(k)).filter(Boolean).join('\n').trim();
+  history.replaceState(null, '', `${location.pathname}${text ? '#/scams' : location.hash}`);
+  if (text) ctx.flash.scam = { text: text.slice(0, MAX_LEN) };
+}
+
 // ---------- start ----------
 
 function start() {
   applyPrefs(prefs);
   if (!window.isSecureContext || !crypto?.subtle || !window.indexedDB) return unsupported();
+  takeSharedText();
   registerServiceWorker();
   navigator.storage?.persist?.().catch(() => {});
   watchActivity();

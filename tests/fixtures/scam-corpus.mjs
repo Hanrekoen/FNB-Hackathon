@@ -1,0 +1,126 @@
+// Test messages for the scam checker: [text, isScam]. Written by hand to look like the SMS,
+// WhatsApp and email messages South Africans receive. They were written alongside the rules,
+// so the hit rate on them is optimistic. Add real (anonymised) messages as they are collected.
+
+export const SCAMS = [
+  // banking and OTP
+  'FNB: Your account has been suspended. Verify your details at fnb-secure-login.com to restore access.',
+  'Absa Alert: Unusual login detected. Reply with the OTP sent to your phone to block the transaction.',
+  'Capitec: We noticed suspicious activity. Please confirm your card number and CVV to keep your card active.',
+  'Nedbank: your profile will be deactivated today. Update now: http://nedbank-update.info',
+  'Dear client, your Standard Bank card is blocked. Call +234 803 555 0101 immediately to unblock your card.',
+  'This is Sipho from FNB fraud department. To cancel the payment please read out the one time pin we just sent.',
+  'TymeBank: Your account is frozen. Click here to reactivate: bit.ly/tyme-reactivate',
+  'Your banking app needs an update. Our technician will help you, please install AnyDesk and share the 9-digit code.',
+  'SECURITY NOTICE: Your Capitec app was locked. Log in at capltecbank.co.za within 24 hours to avoid closure.',
+  'We have refunded R1 250 to your account by mistake. Please send back the money to the account below urgently.',
+  'Hello, this is the bank. Someone tried to take R5 000 from your account. Give me the OTP so I can stop it.',
+  'Your Absa card has been used in Dubai. If this was not you, verify at absa-secure.top now.',
+  // government
+  'SARS: You have an unclaimed tax refund of R4 320.50. Verify your banking details to receive it: sars-efiling-refund.com',
+  'SASSA: Your SRD R370 grant has been approved. Update your banking details here: www.srd-sassa-payments.online',
+  'SASSA notice: your grant was declined. Reapply now by clicking this link: tinyurl.com/srd-reapply',
+  'SAPS: There is a warrant of arrest in your name. Pay the R1 500 admin fee today to cancel it.',
+  'Department of Labour: You qualify for UIF backpay of R12 000. Pay the R250 processing fee to release your funds.',
+  'Eskom: Your prepaid meter will be blocked. Buy discounted tokens now at 50% off, WhatsApp 071 222 3344.',
+  // prizes and lotteries
+  'Congratulations! You have won R50 000 in the Shoprite lucky draw. Send R300 for delivery to claim your prize.',
+  'Vodacom: Your number was selected as our monthly winner! Claim your R25 000 reward at vodacom-prize.click',
+  'You have won an iPhone 15 in the MTN anniversary promotion. Pay the R99 courier fee to receive it.',
+  'Lotto: you are a winner of R2.5 million. Contact our agent on +44 7700 900123 to process your winnings.',
+  'Baie geluk! Jy het R10 000 gewen in die Pick n Pay-kompetisie. Betaal ’n vrystellingsfooi van R150 om dit te eis.',
+  'Halala! Uwine u-R15 000. Khokha imali yokukhulula engu-R200 ukuze uthole umklomelo wakho.',
+  // family and friends
+  'Hi Mom, I lost my phone. This is my new number, please save it. Can you send me R800? It is urgent.',
+  'Hey it\'s me, changed my number. I need help, please send R1 200 to this account, don\'t tell anyone.',
+  'Hallo Ma, dis my nuwe nommer. Ek het dringend R500 nodig, moenie vir Pa vertel nie.',
+  'Sawubona mama, le yinombolo yami entsha. Ngicela ungithumelele u-R600 ngokushesha.',
+  'Uncle, my phone was stolen. Please buy R200 airtime and send me the voucher pin.',
+  // jobs and work
+  'Job offer: Shoprite is hiring cashiers. Pay R350 for your uniform and training to secure the position.',
+  'WORK FROM HOME and earn R2 500 a day! Like videos and earn. Join our Telegram group now.',
+  'You have been shortlisted for a data capturing job. Send R200 registration fee to start tomorrow.',
+  'Werk van die huis af! Verdien R2 000 per dag. Betaal net ’n registrasiefooi van R100.',
+  'Umsebenzi wokusebenzela ekhaya: hola u-R1 500 ngosuku. Khokha imali yokubhalisa engu-R150.',
+  'Earn R1 000 daily! Receive payments into your account and transfer them to our clients. Keep 10%.',
+  'We need people to receive money in their bank account and withdraw it for us. Easy R3 000 per week.',
+  // investments and pyramids
+  'Join our money flip! Invest R1 000 and receive R5 000 in 48 hours. Guaranteed returns.',
+  'Bitcoin trading with 30% profit per week. Risk-free, guaranteed income. WhatsApp me to start.',
+  'Gifting circle: pay R500, invite 2 friends and receive R4 000. Double your money this month!',
+  'Our stokvel is doubling money: join with R300 and receive R1 200 on Friday.',
+  'Forex investment platform: earn guaranteed profits daily. Minimum deposit R500.',
+  // loans
+  'Instant loans up to R80 000! No credit checks, blacklisted welcome. Pay R450 admin fee upfront.',
+  'Your loan of R15 000 is approved. To release the funds, deposit the insurance fee of R600 first.',
+  'Lenings tot R30 000, geen kredietkontrole, swartgelys welkom. Stuur net R300 vir administrasie.',
+  // parcels, SIM, utilities
+  'Your parcel is on hold due to unpaid customs duty. Pay R38.99 here: http://192.168.10.4/pay',
+  'Post Office: Delivery failed. Reschedule your delivery and pay the R25 fee at postoffice-redelivery.site',
+  'Your SIM card will be deactivated today. Re-register for RICA at rica-update.live to avoid disconnection.',
+  'Jou pakkie word by die doeane teruggehou. Betaal R40 by http://185.20.1.9/pakkie',
+  'Iphasela lakho alikwazanga ukulethwa. Khokha u-R30 ukuze kuhlelwe kabusha: bit.ly/iphasela',
+  // romance, rental, marketplace
+  'My love, I am stuck at customs in Johannesburg. Please send money for the fees so I can come to you.',
+  'Darling, the hospital needs R5 000 before they treat me. Please transfer it today, I will pay you back.',
+  'The flat is still available. I am currently overseas, so pay the deposit first and I will courier the keys.',
+  'Room to rent in Sandton R3 000. Pay a deposit to hold it before viewing, many people are interested.',
+  'I sent you R5 000 by mistake instead of R500, please refund the difference today. Here is the proof of payment.',
+  'Buyer: I have paid, here is my proof of payment. Please release the goods to my driver now.',
+  // gift cards, premium
+  'This is SARS. Your outstanding tax must be paid today using Google Play gift cards or you will be arrested.',
+  'To claim your prize call 0900 765 432 now. Calls cost R5 per minute.',
+  'Your WhatsApp will expire. Verify your account here within 24 hours: whatsapp-verify.xyz',
+  // disguised
+  'FNB: Pl3ase s3nd y0ur 0TP to c0nfirm your acc0unt.',
+  'Send the O.T.P we sent you to stop the payment of R4 000.',
+];
+
+export const REAL = [
+  // genuine bank messages
+  'Your FNB OTP is 482913 for a purchase of R349.00 at Takealot. Never share this PIN with anyone, including FNB staff.',
+  'FNB: R1 250.00 paid from cheq a/c..1234 to Shoprite on 24 Oct at 14:02. Avail R3 420.15.',
+  'Absa: Your salary of R12 500.00 has been paid into your account ending 4410.',
+  'Capitec: R200.00 withdrawn at ATM Mall of Africa. Not you? Use the Capitec app to block your card.',
+  'Nedbank will never ask you for your PIN or OTP. Do not share these with anyone.',
+  'Standard Bank: Your debit order of R450.00 to MTN was paid. Questions? Open your banking app.',
+  'Your monthly statement is ready to view in the FNB app.',
+  'Jou Absa OTP is 551209. Moet dit nooit met iemand deel nie.',
+  'I-OTP yakho ye-Capitec ngu-774310. Ungayiniki muntu le nombolo.',
+  // family and friends
+  'Hi, I will be home at 6. Please buy bread and milk on your way.',
+  'Mom, I got to school safely. The taxi was late but all good.',
+  'Happy birthday my friend! Hope you have a wonderful day.',
+  'Can you fetch the kids at 3? I\'m stuck in a meeting.',
+  'Hallo Ma, ons kom Sondag vir middagete. Moet ons iets saambring?',
+  'Sawubona baba, ngifikile ekhaya. Sizokhuluma kusasa.',
+  'Thanks for the money for the electricity, I\'ll pay you back on Friday when I get paid.',
+  // services and reminders
+  'Reminder: your clinic appointment is on Tuesday 28 Oct at 09:00. Please bring your ID book.',
+  'Dis-Chem: Your prescription is ready for collection at Menlyn.',
+  'Eskom: Planned maintenance in your area on Saturday from 08:00 to 14:00. We apologise for the inconvenience.',
+  'City of Tshwane: Water supply will be interrupted on Monday from 09:00 to 15:00 for repairs.',
+  'Your Checkers Sixty60 order is on its way. Your driver is Thabo.',
+  'Takealot: Your order has been delivered to the Pickup Point. Collect within 7 days with your ID.',
+  'Vodacom: You have used 80% of your data bundle. Dial *135# to check your balance.',
+  'MTN: Thank you for your recharge of R50. Your airtime balance is R63.20.',
+  'Telkom: your bill of R399.00 is due on 1 Nov. Pay via the Telkom app or at any retailer.',
+  'School notice: parents meeting on Thursday at 18:00 in the hall.',
+  'Hi Thandi, the stokvel meeting is at Gogo\'s house on Sunday at 2pm. Bring your contribution for October.',
+  'Your SASSA grant will be paid on 3 November. Please do not share your card PIN with anyone.',
+  // work and jobs (genuine)
+  'Hi Lerato, thanks for your application. Your interview is on Monday at 10:00 at our Rosebank office.',
+  'Team, the meeting moved to Tuesday 10am at the church hall.',
+  'Your payslip for October is available on the HR portal.',
+  'Shift schedule for next week is on the notice board. Contact Mpho if you can\'t make your shift.',
+  // marketplace (genuine)
+  'Is the fridge still available? I can come look at it on Saturday morning.',
+  'Thanks, I received your payment of R800. You can collect the bicycle tomorrow.',
+  // promotions without asks
+  'Pick n Pay: Smart Shopper double points this weekend on all fresh produce.',
+  'Clicks: Your ClubCard voucher of R50 is loaded. Use it in store before 30 Nov.',
+  'Woolworths: Your WRewards savings this month were R124.50.',
+  'Capitec will never call you to ask for your password or remote access to your phone.',
+  'Join us for the community clean-up on Saturday at 8am. Bring gloves!',
+  'Your Uber is arriving in 3 minutes. White Toyota Corolla.',
+];

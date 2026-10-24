@@ -6,9 +6,10 @@ import { test } from 'node:test';
 import af from '../js/lang/af.js';
 import en from '../js/lang/en.js';
 import zu from '../js/lang/zu.js';
-import { RULE_IDS } from '../js/core/scam.js';
-import { IN_CATS, OUT_CATS } from '../js/core/categories.js';
+import { COMBO_IDS, RULE_IDS } from '../js/core/scam.js';
+import { ICONS, IN_CATS, OUT_CATS } from '../js/core/categories.js';
 import { PATTERNS } from '../js/core/income.js';
+import { ICON_DATA } from '../js/icon-data.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8');
@@ -21,7 +22,10 @@ function usedKeys() {
   const keys = new Set([
     ...IN_CATS.map((c) => `cat.${c}`),
     ...OUT_CATS.map((c) => `cat.${c}`),
-    ...RULE_IDS.map((id) => `scam.r.${id}`),
+    ...RULE_IDS.flatMap((id) => [`scam.r.${id}`, `scam.ex.${id}`]),
+    ...COMBO_IDS.map((id) => `scam.c.${id}`),
+    ...['stop', 'secret', 'remote', 'mule', 'noPay', 'official', 'family', 'loan', 'sars', 'sassa', 'report'].map((k) => `scam.step.${k}`),
+    'tx.correction',
     ...PATTERNS.map((p) => `income.pattern.${p}`),
     ...['monthly', 'weekly', 'once'].map((f) => `bills.freq.${f}`),
     ...['needs', 'safety', 'free'].map((b) => `bucket.${b}`),
@@ -65,6 +69,29 @@ test('bucket wording never implies the bank has locked or frozen money', () => {
       if (guarded.test(k)) assert.doesNotMatch(v, /frozen|locked|bevrie|gesluit|kukhiyiwe|iqandisiwe/i, `${name} ${k}`);
     }
   }
+});
+
+test('no emoji anywhere in the app: icons come from js/icon-data.js', () => {
+  const emoji = /[\p{Extended_Pictographic}\u{FE0F}]/u;
+  for (const f of [...walk('js').filter((x) => x.endsWith('.js')), 'css/app.css', 'index.html', 'manifest.webmanifest']) {
+    read(f).split('\n').forEach((line, i) => assert.doesNotMatch(line, emoji, `${f}:${i + 1}`));
+  }
+});
+
+test('every icon used in the code exists', () => {
+  const used = new Set(Object.values(ICONS));
+  for (const f of sources) {
+    const s = read(f);
+    for (const m of s.matchAll(/\bicon\(\s*'([\w-]+)'/g)) used.add(m[1]);
+    // card(['name', t(...)]) and heading('h2', ['name', t(...)])
+    for (const m of s.matchAll(/\b(?:card|heading)\(\s*(?:'h\d',\s*)?\['([\w-]+)',/g)) used.add(m[1]);
+    const tabs = s.match(/const TABS = \[([\s\S]*?)\];/);
+    if (tabs) for (const m of tabs[1].matchAll(/\['\w+', '([\w-]+)'\]/g)) used.add(m[1]);
+    const levels = s.match(/const LEVEL_ICON = (\{.*\});/);
+    if (levels) for (const m of levels[1].matchAll(/:\s*\[?'([\w-]+)'/g)) used.add(m[1]);
+  }
+  assert.ok(used.size > 30, `only found ${used.size} icon names`);
+  assert.deepEqual([...used].filter((n) => !(n in ICON_DATA)), []);
 });
 
 test('service worker precaches every app file', () => {

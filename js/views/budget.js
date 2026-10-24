@@ -1,17 +1,18 @@
 // "Money" tab: record money in/out, expected income date, bills, monthly overview, history.
 
-import { billNextDue, monthTotals, spendingByCategory, summarize } from '../core/budget.js';
+import { billNextDue, cashAvailable, monthTotals, spendingByCategory, summarize } from '../core/budget.js';
 import { NOTICE_DAYS, allocate, applyAllocation, payBill } from '../core/buckets.js';
 import { IN_CATS, OUT_CATS } from '../core/categories.js';
 import { daysBetween, isISODate, todayISO } from '../core/dates.js';
 import { variableEstimate } from '../core/forecast.js';
 import { centsToInput, parseAmount, parseOptionalAmount } from '../core/money.js';
+import { paymentNeedsCheck } from '../core/scam-advice.js';
 import { h } from '../dom.js';
 import { t } from '../i18n.js';
 import { profileSummary } from './profile.js';
 import {
   amountInput, checkRow, daysText, field, fmtDate, formError, money, newId, pageTitle, select, showError, sortTx, stat, txList,
-  weekdayName,
+  trashIcon, weekdayName,
 } from './ui.js';
 
 const HISTORY_LIMIT = 100;
@@ -57,11 +58,20 @@ function addForm(ctx, initialType) {
     if (!isISODate(date.value) || date.value > todayISO()) return showError(err, t('err.date'), date);
     const categories = type === 'in' ? IN_CATS : OUT_CATS;
     if (!categories.includes(cat.value)) return showError(err, t('err.category'), cat);
+    // Big or unusual payments are often the end of a scam: offer a check before saving.
+    if (type === 'out' && paymentNeedsCheck(cents, cat.value, cashAvailable(ctx.data.transactions))) {
+      const choice = await ctx.choose(t('pay.checkBody', { amount: money(cents) }), [
+        { value: 'scams', label: t('pay.checkFirst'), secondary: true },
+        { value: 'save', label: t('pay.saveAnyway') },
+      ]);
+      if (choice === 'scams') location.hash = '#/scams';
+      if (choice !== 'save') return;
+    }
     const tx = { id: newId(), type, amount: cents, category: cat.value, note: note.value.trim().slice(0, 80), date: date.value };
     await ctx.commit((d) => {
       d.transactions.push(tx);
       // Plan the new money against the next income as it looks *after* this payment.
-      if (type === 'in') ctx.flash.alloc = allocate(d, cents, todayISO());
+      if (type === 'in') ctx.flash.alloc = allocate(d, cents, todayISO(), tx.id);
     }, t(type === 'in' ? 'money.addedIn' : 'money.addedOut'), type === 'in' ? '#alloc' : null);
   }
 
@@ -275,7 +285,7 @@ function billRow(ctx, b, today) {
       paidAmount && h('div', { class: 'pay-amount' }, paidAmount),
       h('button', { type: 'button', class: 'btn small', 'aria-label': t('bills.paidLabel', { name: b.name }), on: { click: pay } }, t('bills.paid')),
       h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('bills.delete', { name: b.name }), on: { click: remove } },
-        h('span', { 'aria-hidden': 'true', text: '🗑️' }))),
+        trashIcon())),
     err);
 }
 
