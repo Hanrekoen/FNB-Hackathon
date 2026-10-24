@@ -242,7 +242,10 @@ function practiceCard() {
       const r = checkMessage(message);
       feedback.replaceChildren(
         h('p', { class: `quiz-feedback with-icon ${correct ? 'ok' : 'danger'}` }, icon(correct ? 'check' : 'stop'), `${t(correct ? 'quiz.right' : 'quiz.wrong')} ${t(isScam ? 'practice.wasScam' : 'practice.wasReal')}`),
-        r.matches.length ? [highlighted(message, r.spans), bulletList(r.matches.map((id) => t(`scam.r.${id}`)))] : h('p', { class: 'hint', text: t('practice.noSigns') }),
+        // replaceChildren() can't take an array, so the reasons go in one wrapper element.
+        r.matches.length
+          ? h('div', {}, highlighted(message, r.spans), bulletList(r.matches.map((id) => t(`scam.r.${id}`))))
+          : h('p', { class: 'hint', text: t('practice.noSigns') }),
         h('button', { class: 'btn', type: 'button', on: { click: () => { i++; show(); } } }, t('practice.next'), icon('arrowRight')));
     };
     const buttons = [
