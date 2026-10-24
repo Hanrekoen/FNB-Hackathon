@@ -293,7 +293,6 @@ function billRow(ctx, b, today) {
       h('button', { type: 'button', class: 'btn small', 'aria-label': t('bills.paidLabel', { name: b.name }), on: { click: pay } }, t('bills.paid')),
       h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('bills.delete', { name: b.name }), on: { click: remove } },
         trashIcon())),
-        icon('trash'))),
     err);
 }
 

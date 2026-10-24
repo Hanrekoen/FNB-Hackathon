@@ -2,8 +2,7 @@
 // soft-guarded) and Free (what's left, which becomes safe-to-spend). Money never moves in a
 // bank here; these are amounts Imali keeps aside on the user's behalf.
 
-import { cashAvailable, goalSaved, needsBalance, safetyBalance, summarize } from './budget.js';
-import { needsBalance, safetyBalance, summarize } from './budget.js';
+import { cashAvailable, needsBalance, safetyBalance, summarize } from './budget.js';
 import { addDays, toISO } from './dates.js';
 import { monthlyEquivalent } from './forecast.js';
 import { datedGoalContributions, savingsShare, savingsTarget } from './goals.js';
@@ -22,12 +21,10 @@ export const pendingTotal = (data) => sum(pendingReleases(data).map((r) => r.amo
 export const needsAvailable = (data) => Math.max(0, needsBalance(data.transactions) - pendingTotal(data));
 
 /**
- * Split income that was just recorded: cover bills due before the next income first, then
- * the savings %, and the rest is free. Never sets aside more than the cash actually on hand.
- * `incomeId` links the split to its income, so deleting the income can undo the split.
  * Split income that was just recorded: bills due before the next income first, then the
  * savings % (emergency fund first), then each dated goal's per-payday amount, nearest deadline
  * first. The rest is free. Never sets aside more than the free money actually on hand.
+ * `incomeId` links the split to its income, so deleting the income can undo the split.
  */
 export function allocate(data, amount, today, incomeId = null) {
   const s = summarize(data, today);
@@ -58,14 +55,14 @@ export function allocate(data, amount, today, incomeId = null) {
   };
 }
 
-/** Records an allocation. Creates an emergency fund if the user has no goals yet. */
-export function applyAllocation(data, { needs, safety, goalId, incomeId = null }, today, emergencyName, newId = defaultId) {
+/**
+ * Records an allocation. Creates an emergency fund if the savings % has nowhere to go yet.
+ * Every move is linked to its income, so deleting the income undoes the whole split.
+ */
+export function applyAllocation(data, { needs, safety, goalId, goals = [], incomeId = null }, today, emergencyName, newId = defaultId) {
   const link = incomeId ? { fromIncome: incomeId } : {};
+  const save = (goal, amount) => data.transactions.push({ id: newId(), type: 'save', amount, goalId: goal, category: 'save', note: '', date: today, ...link });
   if (needs > 0) data.transactions.push({ id: newId(), type: 'needs', amount: needs, category: 'needs', note: '', date: today, ...link });
-/** Records an allocation. Creates an emergency fund if the savings % has nowhere to go yet. */
-export function applyAllocation(data, { needs, safety, goalId, goals = [] }, today, emergencyName, newId = defaultId) {
-  const save = (goal, amount) => data.transactions.push({ id: newId(), type: 'save', amount, goalId: goal, category: 'save', note: '', date: today });
-  if (needs > 0) data.transactions.push({ id: newId(), type: 'needs', amount: needs, category: 'needs', note: '', date: today });
   for (const g of goals) if (g.amount > 0 && data.goals.some((x) => x.id === g.goalId)) save(g.goalId, g.amount);
   if (safety <= 0) return;
   let id = goalId ?? savingsTarget(data)?.id ?? data.goals.find((g) => g.kind === 'emergency')?.id;
@@ -73,7 +70,7 @@ export function applyAllocation(data, { needs, safety, goalId, goals = [] }, tod
     id = newId();
     data.goals.push({ id, name: emergencyName, target: EMERGENCY_STARTER, kind: 'emergency' });
   }
-  data.transactions.push({ id: newId(), type: 'save', amount: safety, goalId: id, category: 'save', note: '', date: today, ...link });
+  save(id, safety);
 }
 
 /**
@@ -91,7 +88,6 @@ export function deleteTransaction(data, txId, today, newId = defaultId) {
     data.transactions.push({ id: newId(), type: 'release', amount: excess, category: 'release', note: '', date: today, correction: true });
   }
   return { linked, corrected: Math.max(0, excess) };
-  save(id, safety);
 }
 
 export function setAside(data, amount, today, newId = defaultId) {

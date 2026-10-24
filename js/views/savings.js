@@ -8,11 +8,10 @@ import { goalPlan } from '../core/goals.js';
 import { parseAmount } from '../core/money.js';
 import { SAVE_PERCENTS } from '../core/schema.js';
 import { h } from '../dom.js';
-import { icon } from '../icons.js';
 import { list, t } from '../i18n.js';
 import { icon } from '../icons.js';
 import {
-  amountInput, bucketBar, bulletList, card, field, fmtDate, fmtDateTime, formError, money, newId, pageTitle, select, showError, stat, withIcon,
+  amountInput, bucketBar, bulletList, card, field, fmtDate, fmtDateTime, formError, money, heading, newId, pageTitle, select, showError, stat, trashIcon,
 } from './ui.js';
 
 export function render(ctx) {
@@ -31,7 +30,7 @@ export function render(ctx) {
     goals.map((g) => goalCard(ctx, g, cash, today)),
     !goals.length && starterCard(ctx, s),
     newGoalCard(ctx),
-    card(withIcon('bulb', t('save.tipsTitle')), bulletList(list('tips.save'))));
+    card(['lightbulb', t('save.tipsTitle')], bulletList(list('tips.save'))));
 }
 
 function needsCard(ctx, s, today) {
@@ -133,10 +132,10 @@ function goalCard(ctx, g, cash, today) {
     h('div', { class: 'row-between' },
       h('h2', { id: hid }, h('span', { class: 'swatch seg-safety', 'aria-hidden': 'true' }), g.name),
       h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('save.delete', { goal: g.name }), on: { click: remove } },
-        icon('trash'))),
+        trashIcon())),
     h('progress', { max: g.target, value: Math.min(g.saved, g.target), 'aria-label': t('save.progress', { pct }) }),
     h('p', { text: t('save.ofTarget', { saved: money(g.saved), target: money(g.target), pct }) }),
-    g.saved >= g.target && h('p', { class: 'alert ok' }, withIcon('party', t('save.reached'))),
+    g.saved >= g.target && h('p', { class: 'alert ok with-icon' }, icon('party-popper'), t('save.reached')),
     planSection(ctx, g, today),
     dateEditor(ctx, g, today),
     field(t('save.amount'), amount),
@@ -147,9 +146,9 @@ function goalCard(ctx, g, cash, today) {
 }
 
 const STATUS = {
-  onTrack: ['ok', 'check'],
-  stretch: ['warn', 'alert'],
-  unrealistic: ['danger', 'stop'],
+  onTrack: ['ok', 'circle-check'],
+  stretch: ['warn', 'triangle-alert'],
+  unrealistic: ['danger', 'octagon-x'],
   unknown: ['neutral', 'info'],
   pastDue: ['warn', 'calendar'],
 };
@@ -220,7 +219,7 @@ function planSection(ctx, g, today) {
       class: 'big-fact',
       text: t(perKey, { amount: money(p.perContribution), monthly: money(p.monthlyNeed), target: money(g.target), date: fmtDate(g.by) }),
     }),
-    h('p', { class: `goal-status ${cls}` }, icon(iconName, { cls: 'title-icon' }), statusText),
+    h('p', { class: `goal-status ${cls}` }, icon(iconName), statusText),
     p.status === 'stretch' && [cutList(p.cuts), h('p', { class: 'hint', text: t('goals.cutsTotal', { amount: money(cutsTotal) }) }), usePlanBtn(p.cuts)],
     p.status === 'unrealistic' && p.cuts.length > 0 && [
       h('h3', { text: t('goals.waysToSave') }),
@@ -231,7 +230,7 @@ function planSection(ctx, g, today) {
       && h('p', { class: 'hint', text: t(p.capacity.otherGoals > 0 ? 'goals.noDateOtherGoals' : 'goals.noDate') }),
     (p.status === 'unrealistic' || p.status === 'pastDue') && h('div', { class: 'row' }, moveBtn, lowerBtn),
     g.plan && h('div', { class: 'goal-accepted' },
-      h('h3', {}, withIcon('target', t('goals.planTitle'))),
+      heading('h3', ['target', t('goals.planTitle')]),
       h('p', { text: t(p.unit === 'week' ? 'goals.planPerWeek' : 'goals.planPerPayday', { amount: money(g.plan.perContribution) }) }),
       g.plan.cuts.length > 0 && cutList(g.plan.cuts),
       h('button', { class: 'btn small secondary', type: 'button', on: { click: () => change((goal) => { delete goal.plan; }, t('goals.planDropped')) } }, t('goals.dropPlan'))),
@@ -258,7 +257,7 @@ function dateEditor(ctx, g, today) {
   // The goal card is a form whose submit adds savings, so Enter here must save the date instead.
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
   return h('details', { class: 'goal-date' },
-    h('summary', {}, withIcon('calendar', t(g.by ? 'goals.dateChange' : 'goals.dateAdd'))),
+    h('summary', {}, icon('calendar'), t(g.by ? 'goals.dateChange' : 'goals.dateAdd')),
     field(t('goals.dateLabel'), input, t('save.byWhenHint')),
     err,
     h('div', { class: 'row' },

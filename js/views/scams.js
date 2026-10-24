@@ -7,11 +7,11 @@ import { CONTACTS, PRACTICE_IS_SCAM, firstAmount, nextSteps } from '../core/scam
 import { MAX_LEN, RULES_VERSION, RULE_IDS, checkMessage } from '../core/scam.js';
 import { SCAM_LOG_MAX, SCAM_LOG_TEXT } from '../core/schema.js';
 import { h } from '../dom.js';
-import { list, t } from '../i18n.js';
+import { list, locale, t } from '../i18n.js';
 import { icon } from '../icons.js';
-import { bulletList, card, field, pageTitle, withIcon } from './ui.js';
+import { bulletList, card, field, fmtDate, heading, newId, pageTitle, trashIcon } from './ui.js';
 
-const LEVEL_ICON = { none: 'shieldCheck', low: 'info', medium: 'alert', high: 'stop' };
+const LEVEL_ICON = { none: ['shield-check', 'ok'], low: ['info', 'warn'], medium: ['triangle-alert', 'warn'], high: ['octagon-alert', 'danger'] };
 const QUIZ = [
   { id: 1, correct: 1 },
   { id: 2, correct: 0 },
@@ -267,18 +267,6 @@ function signsCard() {
       h('ul', { class: 'plain signs' }, RULE_IDS.map((id) => h('li', {},
         h('p', { text: t(`scam.r.${id}`) }),
         h('p', { class: 'example', text: t('scam.exampleOf', { example: t(`scam.ex.${id}`) }) }))))));
-    card(withIcon('shield', t('scam.rulesTitle')), bulletList(list('scam.rules'))),
-    card(withIcon('quiz', t('quiz.title')), QUIZ.map(quizItem)),
-    card(withIcon('lifebuoy', t('scam.helpTitle')), bulletList(list('scam.help'))));
-}
-
-function resultCard(r) {
-  return h('section', { class: `card result scam-${r.level}` },
-    h('h2', { text: t('scam.result') }),
-    h('p', { class: `badge ${r.level}` }, icon(LEVEL_ICON[r.level], { cls: 'title-icon' }), t(`scam.level.${r.level}`)),
-    r.matches.length > 0 && h('h3', { text: t('scam.why') }),
-    r.matches.length > 0 && bulletList(r.matches.map((id) => t(`scam.r.${id}`))),
-    h('p', { text: t(`scam.advice.${r.level}`) }));
 }
 
 function quizItem(q) {
@@ -291,8 +279,8 @@ function quizItem(q) {
       click: () => {
         buttons.forEach((b, j) => b.setAttribute('aria-pressed', String(i === j)));
         const right = i === q.correct;
-        feedback.className = `quiz-feedback ${right ? 'ok' : 'danger'}`;
-        feedback.replaceChildren(icon(right ? 'check' : 'stop', { cls: 'title-icon' }), `${t(right ? 'quiz.right' : 'quiz.wrong')} ${t(`quiz.${q.id}.why`)}`);
+        feedback.className = `quiz-feedback with-icon ${right ? 'ok' : 'danger'}`;
+        feedback.replaceChildren(icon(right ? 'check' : 'x'), `${t(right ? 'quiz.right' : 'quiz.wrong')} ${t(`quiz.${q.id}.why`)}`);
       },
     },
   }, t(`quiz.${q.id}.${i ? 'b' : 'a'}`)));

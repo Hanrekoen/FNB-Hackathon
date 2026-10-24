@@ -3,7 +3,6 @@ import { ICONS } from '../core/categories.js';
 import { parseISO, todayISO } from '../core/dates.js';
 import { formatMoney } from '../core/money.js';
 import { h } from '../dom.js';
-import { icon } from '../icons.js';
 import { locale, t } from '../i18n.js';
 import { icon } from '../icons.js';
 
@@ -111,11 +110,9 @@ export function bucketBar({ needs, safety, free }) {
       h('dd', { text: money(v) })))));
 }
 
-/** Heading content with a leading icon. */
-export const withIcon = (name, text) => [icon(name, { cls: 'title-icon' }), text];
-
+/** A card with a heading; pass [iconName, text] as the title for a leading icon. */
 export function card(title, ...children) {
-  return h('section', { class: 'card' }, h('h2', {}, title), children);
+  return h('section', { class: 'card' }, heading('h2', title), children);
 }
 
 export function heading(tag, title, props = {}) {
@@ -178,6 +175,6 @@ export function txList(ctx, txs, withDelete) {
       h('span', { class: `tx-amt ${SIGN_CLASS[sign] ?? ''}`, text: `${sign}${money(tx.amount)}` }),
       withDelete && !UNDELETABLE.includes(tx.type) && h('button', {
         type: 'button', class: 'icon-btn', 'aria-label': t('tx.delete', { what: title, amount: money(tx.amount) }), on: { click: remove },
-      }, icon('trash')));
+      }, trashIcon()));
   }));
 }

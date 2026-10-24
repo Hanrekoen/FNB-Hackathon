@@ -6,9 +6,8 @@ import { test } from 'node:test';
 import af from '../js/lang/af.js';
 import en from '../js/lang/en.js';
 import zu from '../js/lang/zu.js';
-import { RULE_IDS } from '../js/core/scam.js';
-import { ICONS as TX_ICONS, IN_CATS, OUT_CATS } from '../js/core/categories.js';
-import { ICON_NAMES } from '../js/icons.js';
+import { COMBO_IDS, RULE_IDS } from '../js/core/scam.js';
+import { ICONS, IN_CATS, OUT_CATS } from '../js/core/categories.js';
 import { PATTERNS } from '../js/core/income.js';
 import { ICON_DATA } from '../js/icon-data.js';
 
@@ -72,21 +71,30 @@ test('bucket wording never implies the bank has locked or frozen money', () => {
   }
 });
 
-test('the app draws SVG icons, never emoji', () => {
+test('no emoji anywhere in the app: icons come from js/icon-data.js', () => {
   const emoji = /[\p{Extended_Pictographic}\u{FE0F}]/u;
-  for (const f of walk('js').filter((x) => x.endsWith('.js'))) assert.doesNotMatch(read(f), emoji, f);
+  for (const f of [...walk('js').filter((x) => x.endsWith('.js')), 'css/app.css', 'index.html', 'manifest.webmanifest']) {
+    read(f).split('\n').forEach((line, i) => assert.doesNotMatch(line, emoji, `${f}:${i + 1}`));
+  }
 });
 
-test('every icon the app asks for exists', () => {
-  const known = new Set(ICON_NAMES);
-  const used = new Set(Object.values(TX_ICONS));
+test('every icon used in the code exists', () => {
+  const used = new Set(Object.values(ICONS));
   for (const f of sources) {
     const s = read(f);
-    for (const m of s.matchAll(/\bicon\(\s*'(\w+)'/g)) used.add(m[1]);
-    for (const m of s.matchAll(/(?:LEVEL_ICON|STATUS_ICON) = \{([^}]*)\}/g)) for (const v of m[1].matchAll(/'(\w+)'/g)) used.add(v[1]);
-    for (const m of s.matchAll(/const TABS = \[([^;]*)\];/g)) for (const v of m[1].matchAll(/\['\w+', '(\w+)'\]/g)) used.add(v[1]);
+    for (const m of s.matchAll(/\bicon\(\s*'([\w-]+)'/g)) used.add(m[1]);
+    // card(['name', t(...)]) and heading('h2', ['name', t(...)])
+    for (const m of s.matchAll(/\b(?:card|heading)\(\s*(?:'h\d',\s*)?\['([\w-]+)',/g)) used.add(m[1]);
+    const tabs = s.match(/const TABS = \[([\s\S]*?)\];/);
+    if (tabs) for (const m of tabs[1].matchAll(/\['\w+', '([\w-]+)'\]/g)) used.add(m[1]);
+    const levels = s.match(/const LEVEL_ICON = (\{.*\});/);
+    if (levels) for (const m of levels[1].matchAll(/:\s*\[?'([\w-]+)'/g)) used.add(m[1]);
+    // Goal status: [cssClass, iconName] pairs
+    const status = s.match(/const STATUS = \{([\s\S]*?)\};/);
+    if (status) for (const m of status[1].matchAll(/\['\w+', '([\w-]+)'\]/g)) used.add(m[1]);
   }
-  assert.deepEqual([...used].filter((n) => !known.has(n)), []);
+  assert.ok(used.size > 30, `only found ${used.size} icon names`);
+  assert.deepEqual([...used].filter((n) => !(n in ICON_DATA)), []);
 });
 
 test('service worker precaches every app file', () => {

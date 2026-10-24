@@ -249,6 +249,20 @@ describe('deleting an income after its split', () => {
     assert.equal(d.transactions.at(-1).correction, true);
   });
 
+  test('also removes the money the split put towards dated goals', () => {
+    const d = lerato({ goals: [
+      { id: 'em', name: 'Emergency', target: 100_000, kind: 'emergency' },
+      { id: 'hol', name: 'Holiday', target: 40_000, kind: 'goal', by: '2026-11-30' },
+    ] });
+    d.transactions.push({ id: 'pay', type: 'in', amount: 240_000, category: 'allowance', note: '', date: TODAY });
+    applyAllocation(d, allocate(d, 240_000, TODAY, 'pay'), TODAY, 'Emergency fund', id);
+    assert.equal(safetyBalance(d), 10_020 + 10_000);
+    const result = deleteTransaction(d, 'pay', TODAY, id);
+    assert.equal(result.linked.length, 3, 'needs, emergency fund and holiday');
+    assert.equal(safetyBalance(d), 0);
+    assert.equal(d.transactions.length, 0);
+  });
+
   test('deleting other entries leaves Needs alone', () => {
     const d = lerato();
     applyAllocation(d, receive(d, 240_000), TODAY, 'Emergency fund', id);
