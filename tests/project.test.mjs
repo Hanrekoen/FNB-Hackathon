@@ -28,6 +28,7 @@ function usedKeys() {
     'tx.correction',
     ...PATTERNS.map((p) => `income.pattern.${p}`),
     ...['monthly', 'weekly', 'once'].map((f) => `bills.freq.${f}`),
+    ...['essential', 'want'].map((k) => `bills.kind.${k}`),
     ...['needs', 'safety', 'free'].map((b) => `bucket.${b}`),
     ...['home', 'money', 'save', 'credit', 'scams', 'settings', 'profile'].map((r) => `nav.${r}`),
   ]);

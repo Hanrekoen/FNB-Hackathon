@@ -12,12 +12,13 @@ import { t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { profileSummary } from './profile.js';
 import {
-  amountInput, checkRow, daysText, field, fmtDate, formError, money, newId, pageTitle, select, showError, sortTx, stat, txList,
+  amountInput, checkRow, confirmConsequence, daysText, field, fmtDate, formError, money, newId, pageTitle, select, showError, sortTx, stat, txList,
   trashIcon, weekdayName,
 } from './ui.js';
 
 const HISTORY_LIMIT = 100;
 const FREQUENCIES = ['monthly', 'weekly', 'once'];
+const KINDS = ['essential', 'want'];
 
 export function render(ctx, [preset]) {
   const today = todayISO();
@@ -60,6 +61,8 @@ function addForm(ctx, initialType) {
     const categories = type === 'in' ? IN_CATS : OUT_CATS;
     if (!categories.includes(cat.value)) return showError(err, t('err.category'), cat);
     // Big or unusual payments are often the end of a scam: offer a check before saving.
+    // Needs come first: say plainly which bills this would leave short before it's saved.
+    if (type === 'out' && !(await confirmConsequence(ctx, cents))) return;
     if (type === 'out' && paymentNeedsCheck(cents, cat.value, cashAvailable(ctx.data.transactions))) {
       const choice = await ctx.choose(t('pay.checkBody', { amount: money(cents) }), [
         { value: 'scams', label: t('pay.checkFirst'), secondary: true },
@@ -195,6 +198,7 @@ function billForm(ctx, today) {
   const name = h('input', { type: 'text', id: 'bill-name', maxlength: 40, autocomplete: 'off' });
   const amount = amountInput({ id: 'bill-amount' });
   const freq = select(FREQUENCIES.map((f) => [f, t(`bills.freq.${f}`)]), 'monthly', { id: 'bill-freq' });
+  const kind = select(KINDS.map((k) => [k, t(`bills.kind.${k}`)]), 'essential', { id: 'bill-kind' });
   const day = h('input', { type: 'number', id: 'bill-day', min: 1, max: 31, inputmode: 'numeric' });
   const weekday = select([1, 2, 3, 4, 5, 6, 0].map((n) => [n, weekdayName(n)]), 1, { id: 'bill-weekday' });
   const date = h('input', { type: 'date', id: 'bill-date', min: today });
@@ -224,7 +228,8 @@ function billForm(ctx, today) {
     const cents = parseAmount(amount.value);
     if (!n) return showError(err, t('err.name'), name);
     if (!cents) return showError(err, t('err.amount'), amount);
-    const bill = { id: newId(), name: n.slice(0, 40), amount: cents, frequency: freq.value, amountType: 'fixed', lastPaidDue: null };
+    if (!KINDS.includes(kind.value)) return showError(err, t('err.category'), kind);
+    const bill = { id: newId(), name: n.slice(0, 40), amount: cents, frequency: freq.value, amountType: 'fixed', kind: kind.value, lastPaidDue: null };
     if (bill.frequency === 'monthly') {
       const dueDay = Number(day.value);
       if (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31) return showError(err, t('err.day'), day);
@@ -246,6 +251,7 @@ function billForm(ctx, today) {
   return h('form', { novalidate: true, on: { submit: onAdd } },
     field(t('bills.name'), name, t('bills.nameHint')),
     field(t('bills.amount'), amount, t('bills.amountHint')),
+    field(t('bills.kindLabel'), kind, t('bills.kindHint')),
     field(t('bills.frequency'), freq),
     dayField,
     weekdayField,
@@ -284,7 +290,7 @@ function billRow(ctx, b, today) {
 
   return h('li', { class: 'bill' },
     h('div', { class: 'bill-main' },
-      h('strong', { text: b.name }),
+      h('strong', {}, b.name, ' ', h('span', { class: `tag ${b.kind === 'want' ? 'want' : 'essential'}`, text: t(b.kind === 'want' ? 'bills.tag.want' : 'bills.tag.essential') })),
       h('span', { class: 'tx-meta', text: `${amountText} · ${billSchedule(b)}` }),
       h('span', { class: `tx-meta ${overdue ? 'neg' : ''}`, text: t('bills.due', { date: fmtDate(b.due), when }) }),
       b.estimate?.estimated && h('span', { class: 'tx-meta', text: t('bills.estimateBasis', { n: b.estimate.count }) })),

@@ -527,3 +527,14 @@ html.privacy #app { filter: blur(18px); }
 .goal-accepted h3 { display: flex; align-items: center; }
 .goal-date { margin: 8px 0; }
 .goal-date summary { font-weight: 600; }
+
+/* Peace of mind: the border colour repeats what the icon and sentence already say. */
+.card.peace { border-left: 6px solid var(--line); }
+.card.peace.ok { border-left-color: var(--ok); }
+.card.peace.warn { border-left-color: var(--warn); }
+.card.peace.danger { border-left-color: var(--danger); }
+
+/* Essential / want label on each bill; the word carries the meaning, colour only supports it. */
+.tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; border: 1px solid; vertical-align: 0.1em; }
+.tag.essential { color: var(--brand); border-color: var(--brand); }
+.tag.want { color: var(--warn); border-color: var(--warn); }

@@ -4,6 +4,7 @@ import {
   safetyConsequence, setAside,
 } from '../core/buckets.js';
 import { addDays, isISODate, todayISO } from '../core/dates.js';
+import { assessMoney } from '../core/coach.js';
 import { goalPlan } from '../core/goals.js';
 import { parseAmount } from '../core/money.js';
 import { SAVE_PERCENTS } from '../core/schema.js';
@@ -11,7 +12,7 @@ import { h } from '../dom.js';
 import { list, t } from '../i18n.js';
 import { icon } from '../icons.js';
 import {
-  amountInput, bucketBar, bulletList, card, field, fmtDate, fmtDateTime, formError, money, heading, newId, pageTitle, select, showError, stat, trashIcon,
+  amountInput, bucketBar, bulletList, card, confirmConsequence, field, fmtDate, fmtDateTime, formError, money, heading, newId, pageTitle, select, showError, stat, trashIcon,
 } from './ui.js';
 
 export function render(ctx) {
@@ -20,6 +21,7 @@ export function render(ctx) {
   const s = summarize(d, today);
   const cash = cashAvailable(d.transactions);
   const goals = d.goals.map((g) => ({ ...g, saved: goalSaved(d.transactions, g.id) }));
+  const coach = assessMoney(d, today);
 
   return h('div', { class: 'stack' },
     pageTitle(t('save.title'), t('save.lead')),
@@ -27,8 +29,8 @@ export function render(ctx) {
     needsCard(ctx, s, today),
     h('div', { class: 'card stats' }, stat(t('save.total'), money(s.safety), 'pos'), stat(t('save.cash'), money(cash))),
     ruleCard(ctx),
-    goals.map((g) => goalCard(ctx, g, cash, today)),
-    !goals.length && starterCard(ctx, s),
+    goals.map((g) => goalCard(ctx, g, cash, today, coach)),
+    !goals.length && starterCard(ctx, s, coach.emergency),
     newGoalCard(ctx),
     card(['bulb', t('save.tipsTitle')], bulletList(list('tips.save'))));
 }
@@ -102,7 +104,7 @@ async function confirmWithdraw(ctx, amount, today) {
   return ctx.confirm(lines.join('\n\n'), { ok: t('safety.withdraw'), cancel: t('safety.keep') });
 }
 
-function goalCard(ctx, g, cash, today) {
+function goalCard(ctx, g, cash, today, coach) {
   const hid = `goal-${g.id}`;
   const amount = amountInput({ id: `amt-${g.id}` });
   const err = formError();
@@ -114,6 +116,7 @@ function goalCard(ctx, g, cash, today) {
     if (kind === 'save' && cents > cash) return showError(err, t('err.notEnoughCash', { amount: money(Math.max(0, cash)) }), amount);
     if (kind === 'withdraw' && cents > g.saved) return showError(err, t('err.notEnoughSaved', { amount: money(g.saved) }), amount);
     if (kind === 'withdraw' && !(await confirmWithdraw(ctx, cents, today))) return;
+    if (kind === 'save' && !(await confirmConsequence(ctx, cents, 'save'))) return;
     await ctx.commit((d) => {
       d.transactions.push({ id: newId(), type: kind, amount: cents, goalId: g.id, category: kind, note: '', date: today });
     }, t(kind === 'save' ? 'save.added' : 'save.withdrawn', { goal: g.name }));
@@ -136,7 +139,8 @@ function goalCard(ctx, g, cash, today) {
     h('progress', { max: g.target, value: Math.min(g.saved, g.target), 'aria-label': t('save.progress', { pct }) }),
     h('p', { text: t('save.ofTarget', { saved: money(g.saved), target: money(g.target), pct }) }),
     g.saved >= g.target && h('p', { class: 'alert ok with-icon' }, icon('party'), t('save.reached')),
-    planSection(ctx, g, today),
+    g.kind === 'emergency' && emergencySection(coach.emergency),
+    planSection(ctx, g, today, coach.peace.status === 'act'),
     dateEditor(ctx, g, today),
     field(t('save.amount'), amount),
     err,
@@ -155,7 +159,9 @@ const STATUS = {
 
 function cutList(cuts) {
   return h('ul', { class: 'bullets' }, cuts.map((c) => h('li', {
-    text: t('goals.cut', { cut: money(c.cut), category: t(`cat.${c.category}`), current: money(c.current) }),
+    text: c.billId
+      ? t('goals.cutWant', { name: c.name, cut: money(c.cut) })
+      : t('goals.cut', { cut: money(c.cut), category: t(`cat.${c.category}`), current: money(c.current) }),
   })));
 }
 
@@ -179,9 +185,14 @@ function howWeWorkedItOut(p) {
 }
 
 /** Per-payday amount, whether it fits, and ways to make it fit. Guidance only: the user decides. */
-function planSection(ctx, g, today) {
+function planSection(ctx, g, today, needsFirst) {
   const p = goalPlan(ctx.data, g, today);
   if (!p || p.status === 'reached') return null;
+  // Never push saving while bills aren't covered; show the amount, but no plan to accept.
+  if (needsFirst) {
+    return h('div', { class: 'goal-plan' },
+      h('p', { class: 'goal-status warn' }, icon('alert'), t('coach.needsFirst')));
+  }
   const change = (mutate, message) => ctx.commit((d) => {
     const goal = d.goals.find((x) => x.id === g.id);
     if (goal) mutate(goal);
@@ -265,12 +276,41 @@ function dateEditor(ctx, g, today) {
       g.by && h('button', { class: 'btn small secondary', type: 'button', on: { click: () => set(null, t('goals.dateRemoved')) } }, t('goals.dateRemove'))));
 }
 
-function starterCard(ctx, s) {
+/** What having no safety net would mean right now, in rand. */
+function impactLine(e) {
+  const impact = e?.impact;
+  if (!impact) return null;
+  const text = !impact.bill ? t('coach.em.impactLoan')
+    : impact.margin === 0 ? t('coach.em.impactNow', { bill: impact.bill.name })
+      : t('coach.em.impact', { amount: money(impact.margin), bill: impact.bill.name });
+  return h('p', { class: 'hint', text });
+}
+
+const EMERGENCY_REASON = { noFreeMoney: 'coach.em.noFreeMoney', needsUncovered: 'coach.em.needsUncovered', noSavingsRule: 'coach.em.noSavingsRule' };
+
+/** The emergency fund's verdict: how long it lasts, and if it can't grow this month, why and what would help. */
+function emergencySection(e) {
+  return h('div', { class: 'goal-plan' },
+    e.days !== null && h('p', { class: 'big-fact', text: t('coach.em.days', { n: e.days }) }),
+    e.canSave === true && !e.reached && h('p', { class: 'goal-status ok' }, icon('check'), t('coach.em.canSave', { amount: money(e.monthly) })),
+    e.canSave === false && [
+      h('p', { class: 'goal-status warn' }, icon('alert'), t(EMERGENCY_REASON[e.reason])),
+      impactLine(e),
+      e.reason === 'noFreeMoney' && e.plan.cuts.length > 0 && [
+        h('h3', { text: t('coach.em.cutsLead') }),
+        cutList(e.plan.cuts),
+      ],
+    ],
+    e.canSave === null && h('p', { class: 'hint', text: t('goals.unknown') }));
+}
+
+function starterCard(ctx, s, emergency) {
   const target = Math.max(EMERGENCY_STARTER, s.billsTotal);
   const start = () => ctx.commit((d) => { d.goals.push({ id: newId(), name: t('save.emergencyName'), target, kind: 'emergency' }); }, t('save.created'));
   return h('section', { class: 'card highlight' },
     h('h2', { text: t('save.starterTitle') }),
     h('p', { text: t('save.starterBody', { amount: money(target) }) }),
+    impactLine(emergency),
     h('button', { class: 'btn', type: 'button', on: { click: start } }, t('save.starterBtn')));
 }
 

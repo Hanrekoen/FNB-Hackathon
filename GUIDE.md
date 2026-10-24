@@ -51,6 +51,15 @@ The screen also has:
 - **This month** and a **history** list.
 - **Deleting an income also undoes its split.** The Needs and Safety amounts set aside from it are removed with it, and the confirm dialog says how much. For older data with no link, Needs is trimmed so it can never hold more than the cash really there.
 
+### Money coach ([js/core/coach.js](js/core/coach.js))
+Imali "thinks" in a fixed order: **needs** due before the next income, then the **emergency fund**, then **savings goals** (nearest deadline first), then **free** spending. Nothing is recommended for saving while a bill is short.
+- **Peace of mind** (Home): *calm* when needs are covered and money lasts until the next income; *watch* when needs are safe but spending is too fast; *act* when there isn't enough money for a bill (it names the bill, the amount short and cut-backs sized to the days left). A bill that is affordable but not yet set aside is a gentle "set aside" action, not an alarm.
+- **Consequences before money leaves**: recording money out, or moving money into savings, that would come out of bill money shows which bill would go short and by how much. The user chooses "Don't spend it" or "Spend anyway"; Imali never blocks.
+- **Emergency fund** (Save): days of essentials it covers; if it can't grow this month, why (needs uncovered, no free money, or a 0% rule), what that means in rand, and cut-backs.
+- **Essential or want**: each bill is tagged when it is added (a dropdown in "Add a bill"; older bills count as essential). Want bills (DStv, gym, streaming) are still set aside before daily spending, because the debit order still goes off until it is cancelled.
+- **Cut-backs** start with want bills, cancelled whole: the smallest one that covers the gap, otherwise the biggest and so on. Then everyday extras: takeaways, outings, fun, clothing and other, each capped (50/50/50/40/30%). Essential bills, groceries, transport, rent, school, health, family, stokvel, debt and airtime are never cut.
+- **Only essentials raise alarms**: "you're short" and the spending warning are about essential bills; if only a want bill would go short, Imali suggests pausing it instead.
+
 ### Save ([js/views/savings.js](js/views/savings.js))
 - The buckets bar, and the **Needs** card: set money aside, ask for a release (3 days' notice), or cancel a pending release.
 - The "pay yourself first" savings percentage.
@@ -149,6 +158,7 @@ js/core/                                  pure logic with no DOM, all unit-teste
   budget.js      safe-to-spend, income gap, bill due dates
   buckets.js     Needs / Safety / Free, income split, release notice
   goals.js       goals with a deadline: per-payday amount, capacity, cuts, alternatives
+  coach.js       the money coach: peace of mind, emergency fund verdict, consequences of spending
   credit.js      repayment, effective rate, loan risk assessment
   crypto.js      PBKDF2 + AES-GCM helpers
   security.js    PIN and backup-password rules
@@ -205,7 +215,7 @@ $env:PORT=3000; npm start            # PowerShell
 ```bash
 npm test
 ```
-There are 117 tests, and they currently all pass. The main suites:
+There are 174 tests, and they currently all pass. The main suites:
 - **[tests/core.test.mjs](tests/core.test.mjs):** money parsing and formatting, date arithmetic, budget logic (income gaps, late income, bills in short months, shortfall, income split), credit maths and risk flags, scam checker (true positives, "never share" notices not flagged, huge input), PIN rules.
 - **[tests/crypto.test.mjs](tests/crypto.test.mjs):** encrypt/decrypt round trip, a new IV each time, a wrong PIN, tampered data or wrong context all fail, keys can't be exported, iteration bounds, record shape checks.
 - **[tests/project.test.mjs](tests/project.test.mjs):** every translation key exists in all three languages with matching placeholders, every app file is in the service-worker cache, no unsafe HTML or `eval` APIs are used, and the CSP is strict and identical in all three places.

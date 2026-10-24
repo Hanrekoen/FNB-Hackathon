@@ -1,5 +1,6 @@
 import { deleteTransaction } from '../core/buckets.js';
 import { ICONS } from '../core/categories.js';
+import { spendingConsequence } from '../core/coach.js';
 import { parseISO, todayISO } from '../core/dates.js';
 import { formatMoney } from '../core/money.js';
 import { h } from '../dom.js';
@@ -122,6 +123,42 @@ export function heading(tag, title, props = {}) {
 }
 
 export const trashIcon = () => icon('trash');
+
+/** A coach action as a plain sentence; `next` is the next income date. */
+export function actionText(a, next) {
+  const date = fmtDate(next);
+  if (a.kind === 'setAside') return t('coach.action.setAside', { amount: money(a.amount), date });
+  if (a.kind === 'keepTo') return t('coach.action.keepTo', { amount: money(a.amount), date });
+  if (a.kind === 'pauseWant') return t('coach.action.pauseWant', { name: a.name, amount: money(a.amount), date: fmtDate(a.due) });
+  return t('coach.action.cutBefore', { cut: money(a.cut), category: t(`cat.${a.category}`), date });
+}
+
+/**
+ * Before money leaves (spending, or moving it into savings): if it would come out of what's
+ * needed for bills, spell out the consequences and let the user decide. Resolves true to go on.
+ */
+export async function confirmConsequence(ctx, amount, kind = 'spend') {
+  const c = spendingConsequence(ctx.data, amount, todayISO());
+  if (c.fromBillMoney <= 0) return true;
+  const verb = kind === 'save' ? 'coach.save' : 'coach.spend';
+  const [first, ...more] = c.affected;
+  const [want] = c.wants;
+  const lines = [
+    first
+      ? t(`${verb}.short`, { amount: money(amount), short: money(first.short), bill: first.name, billAmount: money(first.planned), date: fmtDate(first.due) })
+      : want
+        ? t('coach.spend.wantShort', { bill: want.name, short: money(want.short), date: fmtDate(want.due) })
+        : t('coach.spend.fromBills', { amount: money(c.fromBillMoney) }),
+    ...more.map((b) => t('coach.spend.bill', { bill: b.name, short: money(b.short), date: fmtDate(b.due) })),
+    c.shortBefore > 0 && t('coach.spend.alreadyShort', { amount: money(c.shortBefore), date: fmtDate(c.nextIncome) }),
+    t('coach.spend.yourCall'),
+  ].filter(Boolean);
+  const choice = await ctx.choose(lines.join('\n\n'), [
+    { value: 'stop', label: t(`${verb}.cancel`) },
+    { value: 'go', label: t(`${verb}.anyway`), secondary: true },
+  ]);
+  return choice === 'go';
+}
 
 export function bulletList(items) {
   return h('ul', { class: 'bullets' }, items.map((x) => h('li', { text: x })));

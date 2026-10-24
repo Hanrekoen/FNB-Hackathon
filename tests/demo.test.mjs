@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { summarize } from '../js/core/budget.js';
 import { pendingReleases } from '../js/core/buckets.js';
+import { assessMoney } from '../js/core/coach.js';
 import { generateDemo } from '../js/core/demo.js';
 import { goalPlan } from '../js/core/goals.js';
 import { normalize } from '../js/core/schema.js';
 
-const names = { rent: 'Rent', data: 'Data', taxi: 'Taxi', registration: 'Fee', emergency: 'Emergency fund', releaseReason: 'Airtime', holiday: 'Holiday' };
+const names = { rent: 'Rent', data: 'Data', taxi: 'Taxi', registration: 'Fee', emergency: 'Emergency fund', releaseReason: 'Airtime', holiday: 'Holiday', streaming: 'Showmax' };
+const coachCut = (d, today) => assessMoney(d, today).emergency.plan.cuts;
 const make = (today) => generateDemo({ today, now: new Date(`${today}T12:00`).getTime(), names, profileName: 'Lerato' });
 
 // A spread of days: month ends, a leap day, year end, and every weekday
@@ -38,6 +40,20 @@ for (const today of DAYS) {
     const plan = goalPlan(d, holiday, today);
     assert.equal(plan.status, 'stretch', `holiday goal is ${plan.status}`);
     assert.ok(plan.cuts.length > 0, 'shows cut suggestions');
+    assert.equal(plan.reason, 'notEnoughSpendable');
+    // A want comes first (cancel the subscription), then an everyday extra; never an essential.
+    assert.equal(plan.cuts[0].name, 'Showmax');
+    assert.equal(plan.cuts[0].cut, 9_900);
+    assert.ok(plan.cuts.slice(1).every((c) => ['takeaway', 'outings', 'clothing', 'fun', 'other'].includes(c.category)), 'only extras after the want');
+    assert.equal(coachCut(d, today)[0].name, 'Showmax', 'the emergency fund advice also starts with the want');
+
+    // A moment worth showing: the emergency fund can't grow this month, with the reason and impact.
+    const coach = assessMoney(d, today);
+    assert.ok(d.bills.some((b) => b.kind === 'want') && d.bills.some((b) => b.kind === 'essential'));
+    assert.equal(coach.emergency.canSave, false);
+    assert.equal(coach.emergency.reason, 'noFreeMoney');
+    assert.ok(coach.emergency.impact.bill && coach.emergency.plan.cuts.length > 0);
+    assert.notEqual(coach.peace.status, 'act', 'the example never starts with a bill short');
     assert.ok(plan.saved > 0 && plan.saved <= 40_000, `saved ${plan.saved}`);
   });
 }

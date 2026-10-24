@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import { CUTTABLE } from '../js/core/categories.js';
 import { addDays } from '../js/core/dates.js';
 import {
-  CUT_CAPS, alternatives, contributionsLeft, datedGoalContributions, goalPlan, maxCuts, monthlyCapacity, monthlyNeed,
+  alternatives, contributionsLeft, datedGoalContributions, goalPlan, maxCuts, monthlyCapacity, monthlyNeed,
   perContribution, suggestCuts,
 } from '../js/core/goals.js';
 import { cautiousMonthlyIncome, defaultIncome } from '../js/core/income.js';
@@ -14,15 +15,16 @@ const tx = (type, amount, date, extra = {}) => ({ id: `t${++n}`, type, amount, d
 
 /**
  * R1 000 every Tuesday since 1 Sep (careful income R4 000/month), rent R1 500, R420 of fun and
- * food in the last two weeks (R900/month), and an empty R1 000 emergency fund (R400/month).
- * Left for a new goal: R1 200 a month. Most the cuts can find: fun R150 + food R10 = R160.
+ * groceries and clothes in the last two weeks (R900/month), and an empty R1 000 emergency fund (R400/month).
+ * Left for a new goal: R1 200 a month. Most the cuts can find: fun R150 + clothing R10 = R160
+ * (groceries are essential and never cut).
  */
 function base(income = defaultIncome()) {
   const d = emptyData('', '2026-09-01');
   d.income = income;
   for (let date = '2026-09-01'; date <= TODAY; date = addDays(date, 7)) d.transactions.push(tx('in', 100_000, date, { category: 'wages' }));
   d.bills = [{ id: 'rent', name: 'Rent', amount: 150_000, frequency: 'monthly', dueDay: 1, amountType: 'fixed', lastPaidDue: null }];
-  d.transactions.push(tx('out', 30_000, '2026-10-20', { category: 'fun' }), tx('out', 12_000, '2026-10-22', { category: 'food' }));
+  d.transactions.push(tx('out', 30_000, '2026-10-20', { category: 'fun' }), tx('out', 9_500, '2026-10-22', { category: 'food' }), tx('out', 2_500, '2026-10-22', { category: 'clothing' }));
   d.goals = [{ id: 'em', name: 'Emergency fund', target: 100_000, kind: 'emergency' }];
   return d;
 }
@@ -111,25 +113,25 @@ describe('monthly capacity', () => {
 
 describe('spending cuts', () => {
   test('biggest category first, rounded up to R10, stopping once the gap is covered', () => {
-    assert.deepEqual(suggestCuts(base(), TODAY, 10_000), [{ category: 'fun', current: 30_000, cut: 10_000 }]);
-    assert.deepEqual(suggestCuts(base(), TODAY, 15_500), [{ category: 'fun', current: 30_000, cut: 15_000 }, { category: 'food', current: 12_000, cut: 1_000 }]);
+    assert.deepEqual(suggestCuts(base(), TODAY, 10_000), [{ category: 'fun', current: 30_000, cut: 10_000, after: 20_000 }]);
+    assert.deepEqual(suggestCuts(base(), TODAY, 15_500), [{ category: 'fun', current: 30_000, cut: 15_000, after: 15_000 }, { category: 'clothing', current: 2_500, cut: 1_000, after: 1_500 }]);
     assert.deepEqual(suggestCuts(base(), TODAY, 0), []);
   });
 
   test('caps are never exceeded, even when the gap is bigger', () => {
     const cuts = suggestCuts(base(), TODAY, 1_000_000);
-    for (const c of cuts) assert.ok(c.cut <= (c.current * CUT_CAPS[c.category]) / 100, c.category);
+    for (const c of cuts) assert.ok(c.cut <= (c.current * CUTTABLE[c.category]) / 100, c.category);
     assert.equal(maxCuts(base(), TODAY), 16_000);
   });
 
   test('essentials and bill payments are never cut', () => {
     const d = base();
-    for (const category of ['rent', 'electricity', 'bills', 'school', 'health', 'family', 'stokvel', 'debt', 'transport']) {
+    for (const category of ['rent', 'electricity', 'bills', 'school', 'health', 'food', 'airtime', 'family', 'stokvel', 'debt', 'transport']) {
       d.transactions.push(tx('out', 900_000, '2026-10-21', { category }));
     }
     d.transactions.push(tx('out', 900_000, '2026-10-21', { category: 'fun', billId: 'x' }));
     const cuts = suggestCuts(d, TODAY, 1_000_000);
-    assert.deepEqual(cuts.map((c) => c.category), ['fun', 'food']);
+    assert.deepEqual(cuts.map((c) => c.category), ['fun', 'clothing']);
     assert.equal(cuts[0].current, 30_000, 'a bill payment is not everyday spending');
   });
 });
@@ -152,7 +154,7 @@ describe('goal status', () => {
     assert.equal(p.status, 'stretch');
     assert.equal(p.monthlyNeed, 130_000);
     assert.equal(p.gap, 10_000);
-    assert.deepEqual(p.cuts, [{ category: 'fun', current: 30_000, cut: 10_000 }]);
+    assert.deepEqual(p.cuts, [{ category: 'fun', current: 30_000, cut: 10_000, after: 20_000 }]);
   });
 
   test('unrealistic, with a later date or a lower amount that both fit', () => {

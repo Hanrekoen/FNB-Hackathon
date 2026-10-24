@@ -1,12 +1,14 @@
 import { summarize } from '../core/budget.js';
+import { assessMoney } from '../core/coach.js';
 import { addDays, dayOfYear, todayISO } from '../core/dates.js';
 import { runOutForecast, spendingPace, weekdayInsight } from '../core/forecast.js';
 import { NUDGE_SNOOZE_DAYS, patternMismatch } from '../core/income.js';
 import { weekIndex } from '../core/scam-advice.js';
 import { h } from '../dom.js';
+import { icon } from '../icons.js';
 import { list, t } from '../i18n.js';
 import { loadExample } from './example.js';
-import { bucketBar, card, daysText, fmtDate, heading, money, pageTitle, sortTx, txList, weekdayName } from './ui.js';
+import { actionText, bucketBar, card, daysText, fmtDate, heading, money, pageTitle, sortTx, txList, weekdayName } from './ui.js';
 
 const SOURCE_NOTE = { estimate: 'home.estimated', late: 'home.late', default: 'home.guess', payday: 'home.payday' };
 
@@ -31,7 +33,7 @@ export function render(ctx) {
         h('div', {}, h('dt', { text: t('home.next') }), h('dd', { text: `${daysText(s.daysLeft)} · ${fmtDate(s.next.date)}` }))),
       sourceNote && h('p', { class: 'hero-note', text: t(sourceNote) })),
 
-    s.shortfall > 0 && h('p', { class: 'alert danger', text: t('home.shortfall', { amount: money(s.shortfall) }) }),
+    !empty && peaceCard(assessMoney(d, today).peace),
 
     h('div', { class: 'quick' },
       h('a', { class: 'btn', href: '#/money/in' }, t('home.addIn')),
@@ -65,6 +67,29 @@ function scamWeekCard(today) {
     heading('h2', ['message', t('home.scamWeek')]),
     h('p', { text: scams[weekIndex(dayOfYear(today), scams.length)] }),
     h('a', { class: 'link', href: '#/scams' }, t('home.scamCheck')));
+}
+
+const PEACE = { calm: ['ok', 'shieldCheck'], watch: ['warn', 'alert'], act: ['danger', 'stop'] };
+
+/** One sentence on whether needs are safe until the next income, and at most two things to do. */
+function peaceCard(p) {
+  const [cls, iconName] = PEACE[p.status];
+  const next = fmtDate(p.next);
+  const message = {
+    calm: () => t('coach.calm', { date: next }),
+    watch: () => t('coach.watch', { runOut: fmtDate(p.runOut), date: next }),
+    act: () => t('coach.act', { amount: money(p.short), bill: p.bill.name, due: fmtDate(p.bill.due) }),
+  }[p.status]();
+  const e = p.evidence;
+  return h('section', { class: `card peace ${cls}`, 'aria-labelledby': 'peace-h' },
+    h('h2', { id: 'peace-h', class: 'with-icon' }, icon(iconName, { cls }), t('coach.title')),
+    h('p', { class: 'big-fact', text: message }),
+    p.actions.length > 0 && h('ul', { class: 'bullets' }, p.actions.map((a) => h('li', { text: actionText(a, p.next) }))),
+    p.status === 'act' && !p.plan.covered && h('p', { class: 'hint', text: t('coach.actNotCovered', { due: fmtDate(p.bill.due) }) }),
+    p.actions.some((a) => a.kind === 'setAside') && h('a', { class: 'link', href: '#/save' }, t('bucket.manage')),
+    h('details', {},
+      h('summary', { text: t('forecast.how') }),
+      h('p', { text: t('coach.numbers', { cash: money(e.cash), bills: money(e.bills), date: next, free: money(e.free), pace: money(e.pace) }) })));
 }
 
 function exampleCard(ctx) {

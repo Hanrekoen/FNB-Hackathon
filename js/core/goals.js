@@ -3,6 +3,7 @@
 // used, so the screen can explain itself.
 
 import { goalSaved } from './budget.js';
+import { CUTTABLE } from './categories.js';
 import { addDays, daysBetween } from './dates.js';
 import { monthlyEquivalent, spendingPace } from './forecast.js';
 import { cautiousMonthlyIncome, hasPayday, incomeDates, nextPayday } from './income.js';
@@ -11,10 +12,6 @@ export const MIN_INCOMES = 3;
 export const MIN_HISTORY_DAYS = 21;
 export const CUT_WINDOW_DAYS = 30;
 const MAX_CONTRIBUTIONS = 520; // ten years of weekly paydays
-
-// Only everyday extras may be cut, each by at most this %. Rent, bills, school, health,
-// family, stokvel, debt and transport are never suggested: cutting them causes real harm.
-export const CUT_CAPS = { fun: 50, clothing: 50, other: 30, food: 15, airtime: 20 };
 
 export const PER_MONTH = { monthly: 1, biweekly: 26 / 12, weekly: 52 / 12, varies: 52 / 12 };
 
@@ -123,28 +120,56 @@ function recentSpending(data, today) {
   return by;
 }
 
-/** Most each cuttable category could give up in a month, biggest spending first. */
-function cuttable(data, today) {
+/**
+ * Most each everyday extra could give up, biggest first. Essential spending is never in
+ * CUTTABLE, so it can never be suggested. `scale` shrinks a month to a shorter period, e.g. the
+ * days left before payday.
+ */
+function cuttableSpending(data, today, scale = 1) {
   return [...recentSpending(data, today)]
-    .filter(([category]) => category in CUT_CAPS)
-    .map(([category, current]) => ({ category, current, max: floorTo10Rand((current * CUT_CAPS[category]) / 100) }))
+    .filter(([category]) => category in CUTTABLE)
+    .map(([category, monthly]) => {
+      const current = Math.round(monthly * scale);
+      return { category, current, max: floorTo10Rand((current * CUTTABLE[category]) / 100) };
+    })
     .filter((c) => c.max > 0)
     .sort((a, b) => b.current - a.current);
 }
 
-export const maxCuts = (data, today) => sum(cuttable(data, today).map((c) => c.max));
+/** Want bills (never essential ones), each saving its whole monthly amount if cancelled. */
+function wantBills(data, today, scale = 1) {
+  // Cancelling only pays off over a month or more, so it isn't offered for "before payday".
+  if (scale < 1) return [];
+  return data.bills
+    .filter((b) => b.kind === 'want' && b.frequency !== 'once')
+    .map((b) => ({ billId: b.id, name: b.name, current: monthlyEquivalent(b, data.transactions, today) }))
+    .filter((w) => w.current > 0);
+}
+
+export const maxCuts = (data, today, scale = 1) =>
+  sum(cuttableSpending(data, today, scale).map((c) => c.max)) + sum(wantBills(data, today, scale).map((w) => w.current));
 
 /**
- * Spending cuts that close a monthly gap: biggest categories first, each rounded up to R10
- * but never past its cap, stopping once the gap is covered.
+ * Cut-backs that close a gap. Want bills come first and whole (a subscription is cancelled, not
+ * trimmed): the smallest one that covers the gap on its own, otherwise the biggest, and so on.
+ * Then everyday extras, biggest first, each rounded up to R10 but never past its cap, stopping
+ * once the gap is covered. `current` and `after` are over the same period as the gap.
  */
-export function suggestCuts(data, today, gap) {
+export function suggestCuts(data, today, gap, scale = 1) {
   const cuts = [];
   let left = gap;
-  for (const c of cuttable(data, today)) {
+  const wants = wantBills(data, today, scale).sort((a, b) => a.current - b.current);
+  while (left > 0 && wants.length) {
+    const fits = wants.find((w) => w.current >= left);
+    const w = fits ?? wants[wants.length - 1];
+    wants.splice(wants.indexOf(w), 1);
+    cuts.push({ billId: w.billId, name: w.name, current: w.current, cut: w.current, after: 0 });
+    left -= w.current;
+  }
+  for (const c of cuttableSpending(data, today, scale)) {
     if (left <= 0) break;
     const cut = Math.min(c.max, ceilTo10Rand(left));
-    cuts.push({ category: c.category, current: c.current, cut });
+    cuts.push({ category: c.category, current: c.current, cut, after: c.current - cut });
     left -= cut;
   }
   return cuts;
@@ -198,8 +223,8 @@ export function goalPlan(data, goal, today) {
   const cuts = suggestCuts(data, today, gap);
   // Spending is the limit when the goal would fit if everyday spending were lower; otherwise income is.
   const limitedBy = need <= capacity.available + capacity.spending ? 'spending' : 'income';
-  if (gap <= possible) return { ...plan, status: 'stretch', gap, cuts, limitedBy };
-  return { ...plan, status: 'unrealistic', gap, cuts, limitedBy, alternatives: alternatives(data, goal, today, capacity) };
+  if (gap <= possible) return { ...plan, status: 'stretch', reason: 'notEnoughSpendable', gap, cuts, limitedBy };
+  return { ...plan, status: 'unrealistic', reason: 'notEnoughTime', gap, cuts, limitedBy, alternatives: alternatives(data, goal, today, capacity) };
 }
 
 /** Per-payday amount for each unfinished dated goal, nearest deadline first, for splitting today's income. */

@@ -1,9 +1,8 @@
 // The shape of the user's data and its migrations. Everything decrypted from the vault or a
 // backup passes through normalize(), so malformed or older data can never reach the app.
 
-import { OUT_CATS } from './categories.js';
+import { CUTTABLE, OUT_CATS } from './categories.js';
 import { isISODate } from './dates.js';
-import { CUT_CAPS } from './goals.js';
 import { PATTERNS, defaultIncome } from './income.js';
 import { MAX_CENTS } from './money.js';
 
@@ -15,6 +14,7 @@ export const SCAM_LOG_TEXT = 500;
 
 const TX_TYPES = ['in', 'out', 'save', 'withdraw', 'needs', 'release'];
 const FREQUENCIES = ['monthly', 'weekly', 'once'];
+export const BILL_KINDS = ['essential', 'want'];
 const RELEASE_STATUS = ['pending', 'released', 'cancelled'];
 const SCAM_LEVELS = ['none', 'low', 'medium', 'high'];
 
@@ -73,6 +73,8 @@ function normalizeBill(b) {
     amount: b.amount,
     frequency: FREQUENCIES.includes(b.frequency) ? b.frequency : 'monthly',
     amountType: b.amountType === 'varies' && OUT_CATS.includes(b.linkedCategory) ? 'varies' : 'fixed',
+    // Bills from before the essential/want choice were all treated as must-pays.
+    kind: b.kind === 'want' ? 'want' : 'essential',
     lastPaidDue: isISODate(b.lastPaidDue) ? b.lastPaidDue : null,
   };
   if (out.amountType === 'varies') out.linkedCategory = b.linkedCategory;
@@ -93,9 +95,12 @@ function normalizeBill(b) {
 
 function normalizePlan(p) {
   if (!p || typeof p !== 'object' || !isAmount(p.perContribution) || !isTime(p.acceptedAt)) return null;
+  // A cut is either less spending in an everyday extra, or a want bill cancelled or cut back.
   const cuts = list(p.cuts)
-    .filter((c) => c.category in CUT_CAPS && isAmount(c.cut) && isInt(c.current, 0, MAX_CENTS))
-    .map((c) => ({ category: c.category, current: c.current, cut: c.cut }));
+    .filter((c) => (c.category in CUTTABLE || (typeof c.billId === 'string' && c.billId)) && isAmount(c.cut) && isInt(c.current, 0, MAX_CENTS))
+    .map((c) => (c.billId
+      ? { billId: str(c.billId, 64), name: str(c.name, 40), current: c.current, cut: c.cut }
+      : { category: c.category, current: c.current, cut: c.cut }));
   return { cuts, perContribution: p.perContribution, acceptedAt: p.acceptedAt };
 }
 

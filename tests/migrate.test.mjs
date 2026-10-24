@@ -25,7 +25,7 @@ test('v1 data migrates to the current version without losing anything', () => {
   assert.equal(d.profile.name, 'Sipho');
   assert.equal(d.settings.savePercent, 15);
   assert.deepEqual(d.transactions.map((t) => t.id), ['a', 'b', 'c']);
-  assert.deepEqual(d.bills, [{ id: 'rent', name: 'Rent', amount: 120_000, frequency: 'monthly', amountType: 'fixed', lastPaidDue: '2026-10-01', dueDay: 1 }]);
+  assert.deepEqual(d.bills, [{ id: 'rent', name: 'Rent', amount: 120_000, frequency: 'monthly', amountType: 'fixed', kind: 'essential', lastPaidDue: '2026-10-01', dueDay: 1 }]);
   assert.equal(d.goals[0].kind, 'goal');
   assert.deepEqual(d.income, { pattern: 'varies', payDay: null, payWeekday: null, anchorDate: null, nudgeSnoozedUntil: null });
   assert.deepEqual(d.releases, []);
@@ -122,4 +122,13 @@ test('saved scam checks and income links are validated', () => {
   assert.equal(d.scamLog[0].text.length, 500);
   assert.equal(d.scamLog[0].wrong, false);
   assert.deepEqual(normalize({ v: 2 }, TODAY).scamLog, []);
+});
+
+test('bills are essential unless marked as a want', () => {
+  const bill = (id, kind) => ({ id, name: id, amount: 1_000, frequency: 'monthly', dueDay: 1, kind });
+  const d = normalize({ bills: [bill('a', 'want'), bill('b', 'essential'), bill('c', 'luxury'), bill('d')] }, TODAY);
+  assert.deepEqual(d.bills.map((b) => b.kind), ['want', 'essential', 'essential', 'essential']);
+  const plan = { cuts: [{ billId: 'a', name: 'Gym', current: 30_000, cut: 30_000 }, { category: 'rent', current: 1, cut: 1 }], perContribution: 5_000, acceptedAt: 1 };
+  const goal = normalize({ goals: [{ id: 'g', name: 'G', target: 10_000, by: '2026-12-01', plan }] }, TODAY).goals[0];
+  assert.deepEqual(goal.plan.cuts, [{ billId: 'a', name: 'Gym', current: 30_000, cut: 30_000 }]);
 });

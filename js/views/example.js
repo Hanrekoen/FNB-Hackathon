@@ -24,6 +24,7 @@ export async function loadExample(ctx) {
     emergency: t('save.emergencyName'),
     releaseReason: t('demo.releaseReason'),
     holiday: t('demo.holiday'),
+    streaming: t('demo.streaming'),
   };
   const next = generateDemo({ today: todayISO(), now: Date.now(), names, profileName: d.profile.name, newId });
   location.hash = '#/home';
