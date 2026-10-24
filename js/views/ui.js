@@ -11,6 +11,15 @@ export function fmtDate(iso) {
   return new Intl.DateTimeFormat(locale(), { weekday: 'short', day: 'numeric', month: 'short' }).format(parseISO(iso));
 }
 
+export function fmtDateTime(ms) {
+  return new Intl.DateTimeFormat(locale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(ms);
+}
+
+/** Weekday name for 0 (Sunday) to 6, in the current language. */
+export function weekdayName(day, style = 'long') {
+  return new Intl.DateTimeFormat(locale(), { weekday: style }).format(new Date(2024, 0, 7 + day));
+}
+
 export function daysText(n) {
   if (n <= 0) return t('when.today');
   if (n === 1) return t('when.tomorrow');
@@ -79,6 +88,23 @@ export function stat(label, value, cls = '') {
   return h('div', { class: 'stat' }, h('span', { class: 'stat-label', text: label }), h('strong', { class: `stat-value ${cls}`, text: value }));
 }
 
+/** Needs / Safety / Free as a stacked bar, with a text legend so colour is never the only signal. */
+export function bucketBar({ needs, safety, free }) {
+  const parts = [['needs', needs], ['safety', safety], ['free', Math.max(0, free)]];
+  const total = parts.reduce((a, [, v]) => a + v, 0);
+  const bar = h('div', { class: 'bucket-bar', 'aria-hidden': 'true' }, parts.map(([k, v]) => {
+    const seg = h('span', { class: `seg-${k}` });
+    // CSSOM writes are allowed by the CSP; style attributes are not.
+    seg.style.flexGrow = String(total ? v : 1);
+    return seg;
+  }));
+  return h('div', { class: 'buckets' },
+    bar,
+    h('dl', { class: 'bucket-legend' }, parts.map(([k, v]) => h('div', {},
+      h('dt', {}, h('span', { class: `swatch seg-${k}`, 'aria-hidden': 'true' }), t(`bucket.${k}`)),
+      h('dd', { text: money(v) })))));
+}
+
 export function card(title, ...children) {
   return h('section', { class: 'card' }, h('h2', { text: title }), children);
 }
@@ -99,13 +125,21 @@ export function txTitle(tx, goals) {
   const goal = goals.get(tx.goalId) ?? t('tx.closedGoal');
   if (tx.type === 'save') return t('tx.save', { goal });
   if (tx.type === 'withdraw') return t('tx.withdraw', { goal });
+  if (tx.type === 'needs') return t('tx.needs');
+  if (tx.type === 'release') return t('tx.release');
   return t(`cat.${tx.category}`);
 }
+
+// Moves between buckets don't change the money on hand, so they show without a sign.
+const SIGN = { in: '+', withdraw: '+', out: '−', save: '−' };
+const SIGN_CLASS = { '+': 'pos', '−': 'neg' };
+// Deleting a Needs move would get around the release notice.
+const UNDELETABLE = ['needs', 'release'];
 
 export function txList(ctx, txs, withDelete) {
   const goals = new Map(ctx.data.goals.map((g) => [g.id, g.name]));
   return h('ul', { class: 'tx-list' }, txs.map((tx) => {
-    const positive = tx.type === 'in' || tx.type === 'withdraw';
+    const sign = SIGN[tx.type] ?? '';
     const title = txTitle(tx, goals);
     const meta = [fmtDate(tx.date), tx.note].filter(Boolean).join(' · ');
     const remove = async () => {
@@ -116,8 +150,8 @@ export function txList(ctx, txs, withDelete) {
     return h('li', { class: 'tx' },
       h('span', { class: 'tx-icon', 'aria-hidden': 'true', text: ICONS[tx.type] }),
       h('span', { class: 'tx-main' }, h('span', { class: 'tx-title', text: title }), h('span', { class: 'tx-meta', text: meta })),
-      h('span', { class: `tx-amt ${positive ? 'pos' : 'neg'}`, text: `${positive ? '+' : '−'}${money(tx.amount)}` }),
-      withDelete && h('button', {
+      h('span', { class: `tx-amt ${SIGN_CLASS[sign] ?? ''}`, text: `${sign}${money(tx.amount)}` }),
+      withDelete && !UNDELETABLE.includes(tx.type) && h('button', {
         type: 'button', class: 'icon-btn', 'aria-label': t('tx.delete', { what: title, amount: money(tx.amount) }), on: { click: remove },
       }, h('span', { 'aria-hidden': 'true', text: '🗑️' })));
   }));

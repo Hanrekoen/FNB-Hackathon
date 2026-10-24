@@ -8,6 +8,7 @@ import en from '../js/lang/en.js';
 import zu from '../js/lang/zu.js';
 import { RULE_IDS } from '../js/core/scam.js';
 import { IN_CATS, OUT_CATS } from '../js/core/categories.js';
+import { PATTERNS } from '../js/core/income.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8');
@@ -21,6 +22,10 @@ function usedKeys() {
     ...IN_CATS.map((c) => `cat.${c}`),
     ...OUT_CATS.map((c) => `cat.${c}`),
     ...RULE_IDS.map((id) => `scam.r.${id}`),
+    ...PATTERNS.map((p) => `income.pattern.${p}`),
+    ...['monthly', 'weekly', 'once'].map((f) => `bills.freq.${f}`),
+    ...['needs', 'safety', 'free'].map((b) => `bucket.${b}`),
+    ...['home', 'money', 'save', 'credit', 'scams', 'settings', 'profile'].map((r) => `nav.${r}`),
   ]);
   for (const level of ['none', 'low', 'medium', 'high']) keys.add(`scam.level.${level}`).add(`scam.advice.${level}`);
   for (const level of ['ok', 'caution', 'danger']) keys.add(`credit.level.${level}`);
@@ -52,6 +57,15 @@ for (const [name, dict] of Object.entries({ af, zu })) {
     }
   });
 }
+
+test('bucket wording never implies the bank has locked or frozen money', () => {
+  const guarded = /^(bucket|needs|alloc|safety|demo)\.|^tx\.(needs|release)$/;
+  for (const [name, dict] of Object.entries({ en, af, zu })) {
+    for (const [k, v] of Object.entries(dict)) {
+      if (guarded.test(k)) assert.doesNotMatch(v, /frozen|locked|bevrie|gesluit|kukhiyiwe|iqandisiwe/i, `${name} ${k}`);
+    }
+  }
+});
 
 test('service worker precaches every app file', () => {
   const sw = read('sw.js');

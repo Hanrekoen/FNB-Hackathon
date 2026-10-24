@@ -4,8 +4,8 @@
 import {
   KDF_ITERATIONS, decryptJSON, deriveKey, encryptJSON, fromB64, isSealedRecord, randomBytes, toB64,
 } from './core/crypto.js';
-import { isISODate, todayISO } from './core/dates.js';
-import { MAX_CENTS } from './core/money.js';
+import { todayISO } from './core/dates.js';
+import { emptyData as schemaEmpty, normalize as normalizeData } from './core/schema.js';
 import * as idb from './idb.js';
 
 const VAULT = 'vault';
@@ -32,40 +32,10 @@ export async function setWipeOnFails(on) {
   await idb.set(META, { ...(await getMeta()), wipeOnFails: !!on });
 }
 
-export function emptyData(name = '') {
-  return {
-    v: 1,
-    profile: { name },
-    settings: { savePercent: 10 },
-    transactions: [],
-    bills: [],
-    goals: [],
-    nextIncome: null,
-    createdAt: todayISO(),
-  };
-}
-
-const isAmount = (n) => Number.isSafeInteger(n) && n > 0 && n <= MAX_CENTS;
-const str = (s, max) => (typeof s === 'string' ? s.slice(0, max) : '');
+export const emptyData = (name = '') => schemaEmpty(name, todayISO());
 
 /** Defensive normalisation of decrypted data (e.g. from an older version or a backup). */
-function normalize(d) {
-  const base = emptyData();
-  const out = { ...base, ...d, profile: { ...base.profile, ...d?.profile }, settings: { ...base.settings, ...d?.settings } };
-  out.profile.name = str(out.profile.name, 40);
-  if (![0, 5, 10, 15, 20, 25, 30].includes(out.settings.savePercent)) out.settings.savePercent = 10;
-  out.transactions = (Array.isArray(d?.transactions) ? d.transactions : [])
-    .filter((t) => t && ['in', 'out', 'save', 'withdraw'].includes(t.type) && isAmount(t.amount) && isISODate(t.date))
-    .map((t) => ({ ...t, id: str(t.id, 64), category: str(t.category, 20), note: str(t.note, 80) }));
-  out.bills = (Array.isArray(d?.bills) ? d.bills : [])
-    .filter((b) => b && isAmount(b.amount) && Number.isInteger(b.dueDay) && b.dueDay >= 1 && b.dueDay <= 31)
-    .map((b) => ({ ...b, id: str(b.id, 64), name: str(b.name, 40), lastPaidDue: isISODate(b.lastPaidDue) ? b.lastPaidDue : null }));
-  out.goals = (Array.isArray(d?.goals) ? d.goals : [])
-    .filter((g) => g && isAmount(g.target))
-    .map((g) => ({ ...g, id: str(g.id, 64), name: str(g.name, 40) }));
-  out.nextIncome = isISODate(out.nextIncome) ? out.nextIncome : null;
-  return out;
-}
+const normalize = (d) => normalizeData(d, todayISO());
 
 async function seal(newKey, newHeader, value) {
   const { iv, ct } = await encryptJSON(newKey, value, VAULT_AAD);

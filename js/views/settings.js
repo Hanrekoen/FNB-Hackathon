@@ -2,9 +2,11 @@ import { todayISO } from '../core/dates.js';
 import { checkBackupPassword, checkNewSecret } from '../core/security.js';
 import { h } from '../dom.js';
 import { LANGS, getLang, list, t } from '../i18n.js';
-import { AUTO_LOCK_OPTIONS } from '../prefs.js';
+import { AUTO_LOCK_OPTIONS, BG_GRACE_OPTIONS } from '../prefs.js';
 import * as vault from '../vault.js';
+import { clearExample, loadExample } from './example.js';
 import { secretFields } from './gate.js';
+import { profileSummary } from './profile.js';
 import {
   bulletList, busy, card, checkRow, field, formError, pageTitle, select, showError,
 } from './ui.js';
@@ -15,6 +17,10 @@ export function render(ctx) {
     pageTitle(t('settings.title')),
     displayCard(ctx, p),
     profileCard(ctx),
+    card(t('income.title'),
+      h('p', { text: profileSummary(ctx.data.income) }),
+      h('a', { class: 'btn secondary', href: '#/profile' }, t('income.change'))),
+    exampleCard(ctx),
     installCard(ctx),
     pinCard(ctx),
     backupCard(ctx),
@@ -43,6 +49,14 @@ function profileCard(ctx) {
     h('h2', { text: t('settings.profile') }),
     field(t('gate.name'), name),
     h('button', { class: 'btn', type: 'submit' }, t('action.save')));
+}
+
+function exampleCard(ctx) {
+  const demo = ctx.data.demo;
+  return card(t('demo.settingsTitle'),
+    h('p', { text: t(demo ? 'demo.settingsOn' : 'demo.settingsOff') }),
+    h('button', { class: 'btn secondary', type: 'button', on: { click: () => (demo ? clearExample(ctx) : loadExample(ctx)) } },
+      t(demo ? 'demo.clear' : 'demo.load')));
 }
 
 function installCard(ctx) {
@@ -123,6 +137,9 @@ function securityCard(ctx, p) {
   const lockSel = select(AUTO_LOCK_OPTIONS.map((m) => [m, t('settings.minutes', { n: m })]), p.autoLockMin, {
     on: { change: () => ctx.setPrefs({ autoLockMin: Number(lockSel.value) }) },
   });
+  const graceSel = select(BG_GRACE_OPTIONS.map((s) => [s, s < 60 ? t('settings.seconds', { n: s }) : t('settings.minutes', { n: s / 60 })]), p.bgGraceSec, {
+    on: { change: () => ctx.setPrefs({ bgGraceSec: Number(graceSel.value) }) },
+  });
   const wipe = h('input', {
     type: 'checkbox',
     on: {
@@ -135,6 +152,7 @@ function securityCard(ctx, p) {
   vault.getMeta().then((m) => { wipe.checked = m.wipeOnFails; });
   return card(t('settings.security'),
     field(t('settings.autoLock'), lockSel, t('settings.autoLockHint')),
+    field(t('settings.bgGrace'), graceSel, t('settings.bgGraceHint')),
     checkRow(wipe, t('settings.wipe', { n: vault.WIPE_AFTER })),
     h('button', { class: 'btn secondary', type: 'button', on: { click: ctx.lock } }, t('action.lock')));
 }

@@ -1,16 +1,20 @@
+import { settleReleases } from './core/buckets.js';
+import { todayISO } from './core/dates.js';
+import { formatMoney } from './core/money.js';
 import { h } from './dom.js';
-import { t } from './i18n.js';
+import { locale, t } from './i18n.js';
 import { applyPrefs, loadPrefs, savePrefs } from './prefs.js';
 import * as vault from './vault.js';
 import * as budget from './views/budget.js';
 import * as credit from './views/credit.js';
 import { onboarding, unlockScreen } from './views/gate.js';
 import * as home from './views/home.js';
+import * as profile from './views/profile.js';
 import * as savings from './views/savings.js';
 import * as scams from './views/scams.js';
 import * as settings from './views/settings.js';
 
-const ROUTES = { home, money: budget, save: savings, credit, scams, settings };
+const ROUTES = { home, money: budget, save: savings, credit, scams, settings, profile };
 const TABS = [
   ['home', '🏠'],
   ['money', '💵'],
@@ -18,7 +22,6 @@ const TABS = [
   ['credit', '💳'],
   ['scams', '🛡️'],
 ];
-const HIDDEN_GRACE_MS = 30_000; // lock if the app was in the background longer than this
 
 const root = document.getElementById('app');
 const toastEl = document.getElementById('toast');
@@ -37,13 +40,13 @@ function toast(message) {
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), 4000);
 }
 
-function confirmDialog(message, { ok = t('action.ok'), danger = false } = {}) {
+function confirmDialog(message, { ok = t('action.ok'), cancel = t('action.cancel'), danger = false } = {}) {
   return new Promise((resolve) => {
     const close = (value) => dlg.close(value);
     const dlg = h('dialog', { class: 'dialog', 'aria-describedby': 'dlg-msg' },
       h('p', { id: 'dlg-msg', text: message }),
       h('div', { class: 'row end' },
-        h('button', { type: 'button', class: 'btn secondary', on: { click: () => close('cancel') } }, t('action.cancel')),
+        h('button', { type: 'button', class: 'btn secondary', on: { click: () => close('cancel') } }, cancel),
         h('button', { type: 'button', class: `btn ${danger ? 'danger' : ''}`, on: { click: () => close('ok') } }, ok)));
     dlg.addEventListener('close', () => {
       resolve(dlg.returnValue === 'ok');
@@ -106,8 +109,12 @@ const gateCtx = {
   savePrefs: (patch) => { prefs = { ...prefs, ...patch }; savePrefs(prefs); },
   confirm: confirmDialog,
   toast,
-  unlocked: () => {
+  unlocked: ({ firstRun = false } = {}) => {
     lastActivity = Date.now();
+    if (firstRun) {
+      ctx.flash.onboarding = true;
+      history.replaceState(null, '', '#/profile');
+    }
     renderShell();
   },
   restart: ctx.restart,
@@ -147,9 +154,11 @@ function renderShell() {
 function renderView(isNavigation) {
   const main = document.getElementById('main');
   if (!vault.isUnlocked() || !root.querySelector('.tabbar')) return;
+  settleDueReleases();
   const r = route();
   const y = window.scrollY;
-  main.replaceChildren(ROUTES[r.name].render(ctx, r.args));
+  const banner = vault.getData().demo && h('p', { class: 'demo-banner', role: 'note', text: t('demo.banner') });
+  main.replaceChildren(...[banner, ROUTES[r.name].render(ctx, r.args)].filter(Boolean));
   for (const a of document.querySelectorAll('.tabbar a')) {
     if (a.dataset.tab === r.name) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
@@ -161,6 +170,15 @@ function renderView(isNavigation) {
   } else {
     window.scrollTo(0, y);
   }
+}
+
+/** Needs releases whose notice has ended move to free money; there are no background jobs, so check on every render. */
+function settleDueReleases() {
+  const released = settleReleases(vault.getData(), Date.now(), todayISO());
+  if (!released.length) return;
+  vault.save().catch(() => toast(t('err.save')));
+  const amount = released.reduce((a, r) => a + r.amount, 0);
+  toast(t('needs.released', { amount: formatMoney(amount, locale()) }));
 }
 
 function lockApp() {
@@ -188,7 +206,7 @@ function watchActivity() {
       document.documentElement.classList.add('privacy');
     } else {
       document.documentElement.classList.remove('privacy');
-      if (vault.isUnlocked() && Date.now() - hiddenAt > HIDDEN_GRACE_MS) lockApp();
+      if (vault.isUnlocked() && Date.now() - hiddenAt > prefs.bgGraceSec * 1000) lockApp();
     }
   });
 }

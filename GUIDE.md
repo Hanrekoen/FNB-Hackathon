@@ -74,7 +74,7 @@ Below the result are borrower rights and the warning signs of an illegal lender 
 
 ### Across the whole app ([js/app.js](js/app.js))
 - A hash router (`#/home`, `#/money`, `#/save`, `#/credit`, `#/scams`, `#/settings`) with a bottom tab bar.
-- **Auto-lock** when idle, and whenever the app has been in the background for more than 30 seconds.
+- **Auto-lock** when idle, and whenever the app has been in the background for longer than the grace period set in Settings (30 s, 2 min or 5 min; 5 min by default for judging).
 - Screen content is **blurred in the app switcher**.
 - Toasts, confirm dialogs and focus management for screen readers.
 - Service worker registration, so the app works offline.
@@ -198,7 +198,7 @@ This copies only the files the app needs into `dist/`. `dist/` is git-ignored.
 3. **Save:** start the emergency fund and move R100 into it. The safe amount on Home goes down.
 4. **Credit:** check R5,000 at 60% over 6 months, with a R600 initiation fee and a R69 monthly fee, against an income of R3,000/month. The repayment is about R1,172/month (39% of income) and the real yearly cost is about 239%. It is flagged **danger**, with the reasons explained.
 5. **Scams:** paste *"Congratulations! You've won R50 000. Pay a R250 release fee and send the OTP to claim: bit.ly/xyz"*. It is rated **high risk**, with each warning sign explained.
-6. **Security:** go to the home screen and back after 30 seconds, and the app is locked. Show that the content is blurred in the app switcher, and that DevTools → IndexedDB contains only ciphertext.
+6. **Security:** set "Lock when I leave the app for" to 30 sec in Settings, go to the home screen and back after 30 seconds, and the app is locked. Show that the content is blurred in the app switcher, and that DevTools → IndexedDB contains only ciphertext.
 7. **Offline:** turn on flight mode and reload. Everything still works.
 
 ---

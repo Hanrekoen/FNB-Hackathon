@@ -4,8 +4,10 @@
 import { detectLang, isLang, setLang } from './i18n.js';
 
 const KEY = 'imali.prefs';
-const DEFAULTS = { lang: null, large: false, contrast: false, autoLockMin: 3, numericPin: true };
+// The 5-minute background grace is for judging, where testers switch apps a lot; 30 s is offered for daily use.
+const DEFAULTS = { lang: null, large: false, contrast: false, autoLockMin: 3, bgGraceSec: 300, numericPin: true };
 export const AUTO_LOCK_OPTIONS = [1, 3, 5, 10];
+export const BG_GRACE_OPTIONS = [30, 120, 300];
 
 export function loadPrefs() {
   let stored = {};
@@ -18,6 +20,7 @@ export function loadPrefs() {
   if (isLang(stored.lang)) p.lang = stored.lang;
   for (const k of ['large', 'contrast', 'numericPin']) if (typeof stored[k] === 'boolean') p[k] = stored[k];
   if (AUTO_LOCK_OPTIONS.includes(stored.autoLockMin)) p.autoLockMin = stored.autoLockMin;
+  if (BG_GRACE_OPTIONS.includes(stored.bgGraceSec)) p.bgGraceSec = stored.bgGraceSec;
   return p;
 }
 

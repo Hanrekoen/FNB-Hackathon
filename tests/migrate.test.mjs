@@ -1,0 +1,82 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { SCHEMA_VERSION, normalize } from '../js/core/schema.js';
+
+const TODAY = '2026-10-24';
+
+const v1 = {
+  v: 1,
+  profile: { name: 'Sipho' },
+  settings: { savePercent: 15 },
+  transactions: [
+    { id: 'a', type: 'in', amount: 500_000, date: '2026-10-01', category: 'gig', note: 'Uber' },
+    { id: 'b', type: 'out', amount: 120_000, date: '2026-10-02', category: 'bills', note: 'Rent', billId: 'rent' },
+    { id: 'c', type: 'save', amount: 10_000, date: '2026-10-02', category: 'save', note: '', goalId: 'g' },
+  ],
+  bills: [{ id: 'rent', name: 'Rent', amount: 120_000, dueDay: 1, lastPaidDue: '2026-10-01' }],
+  goals: [{ id: 'g', name: 'Emergency fund', target: 100_000 }],
+  nextIncome: '2026-10-30',
+  createdAt: '2026-09-01',
+};
+
+test('v1 data migrates to v2 without losing anything', () => {
+  const d = normalize(structuredClone(v1), TODAY);
+  assert.equal(d.v, SCHEMA_VERSION);
+  assert.equal(d.profile.name, 'Sipho');
+  assert.equal(d.settings.savePercent, 15);
+  assert.deepEqual(d.transactions.map((t) => t.id), ['a', 'b', 'c']);
+  assert.deepEqual(d.bills, [{ id: 'rent', name: 'Rent', amount: 120_000, frequency: 'monthly', amountType: 'fixed', lastPaidDue: '2026-10-01', dueDay: 1 }]);
+  assert.equal(d.goals[0].kind, 'goal');
+  assert.deepEqual(d.income, { pattern: 'varies', payDay: null, payWeekday: null, anchorDate: null, nudgeSnoozedUntil: null });
+  assert.deepEqual(d.releases, []);
+  assert.equal(d.demo, false);
+  assert.equal(d.nextIncome, '2026-10-30');
+  assert.equal(d.createdAt, '2026-09-01');
+});
+
+test('normalising v2 data is a no-op', () => {
+  const once = normalize(structuredClone(v1), TODAY);
+  assert.deepEqual(normalize(structuredClone(once), TODAY), once);
+});
+
+test('malformed fields are dropped or reset', () => {
+  const d = normalize({
+    ...structuredClone(v1),
+    settings: { savePercent: 99 },
+    income: { pattern: 'monthly', payDay: 40, payWeekday: 9, anchorDate: 'nope' },
+    transactions: [
+      { id: 'x', type: 'steal', amount: 100, date: '2026-10-01' },
+      { id: 'y', type: 'needs', amount: 5_000, date: '2026-10-01' },
+      { id: 'z', type: 'out', amount: 1_000, date: '2026-10-01', fromNeeds: 9_999 },
+      { id: 'w', type: 'out', amount: -5, date: '2026-10-01' },
+    ],
+    bills: [
+      { id: '1', name: 'Taxi', amount: 15_000, frequency: 'weekly' },
+      { id: '2', name: 'Fuel', amount: 30_000, frequency: 'weekly', weekday: 1, amountType: 'varies' },
+      { id: '3', name: 'Fee', amount: 25_000, frequency: 'once', dueDate: '2026-11-01', amountType: 'varies', linkedCategory: 'school' },
+      { id: '4', name: 'Odd', amount: 1_000, frequency: 'yearly', dueDay: 5 },
+    ],
+    releases: [
+      { id: 'r1', amount: 5_000, requestedAt: 1, availableAt: 2, status: 'pending', reason: 'x'.repeat(200) },
+      { id: 'r2', amount: 5_000, requestedAt: 1, availableAt: 2, status: 'hacked' },
+      { id: 'r3', amount: 0, requestedAt: 1, availableAt: 2, status: 'pending' },
+    ],
+    demo: 'yes',
+  }, TODAY);
+  assert.equal(d.settings.savePercent, 10);
+  assert.deepEqual(d.income, { pattern: 'monthly', payDay: null, payWeekday: null, anchorDate: null, nudgeSnoozedUntil: null });
+  assert.deepEqual(d.transactions.map((t) => t.id), ['y', 'z']);
+  assert.ok(!('fromNeeds' in d.transactions[1]));
+  assert.deepEqual(d.bills.map((b) => [b.id, b.frequency, b.amountType]), [['2', 'weekly', 'fixed'], ['3', 'once', 'fixed'], ['4', 'monthly', 'fixed']]);
+  assert.deepEqual(d.releases.map((r) => r.id), ['r1']);
+  assert.equal(d.releases[0].reason.length, 80);
+  assert.equal(d.demo, false);
+});
+
+test('garbage input becomes empty data', () => {
+  for (const bad of [null, 42, 'text', { transactions: 'nope', bills: [null, 1] }]) {
+    const d = normalize(bad, TODAY);
+    assert.equal(d.v, SCHEMA_VERSION);
+    assert.deepEqual([d.transactions, d.bills, d.goals, d.releases], [[], [], [], []]);
+  }
+});

@@ -2,17 +2,33 @@
 // safe to spend per day until the next money is expected, after setting aside bills.
 
 import { addDays, daysBetween, daysInMonth, parseISO, toISO } from './dates.js';
+import { plannedAmount } from './forecast.js';
+import { hasPayday, incomeDates, incomeGaps, median, nextPayday, percentile } from './income.js';
 
 export const DEFAULT_GAP_DAYS = 14; // no income history yet
 export const OVERDUE_PLAN_DAYS = 7; // income is late: plan conservatively for another week
 
 const sum = (xs) => xs.reduce((a, b) => a + b, 0);
 
-/** Cash on hand: money in, minus money out, minus money moved into savings goals. */
+/** Cash on hand: money in, minus money out, minus money moved into savings goals. Needs moves stay in cash. */
 export function cashAvailable(txs) {
   let cash = 0;
-  for (const tx of txs) cash += tx.type === 'in' || tx.type === 'withdraw' ? tx.amount : -tx.amount;
+  for (const tx of txs) {
+    if (tx.type === 'in' || tx.type === 'withdraw') cash += tx.amount;
+    else if (tx.type === 'out' || tx.type === 'save') cash -= tx.amount;
+  }
   return cash;
+}
+
+/** Money set aside in Imali for bills: top-ups, minus releases, minus bills paid from it. */
+export function needsBalance(txs) {
+  let needs = 0;
+  for (const tx of txs) {
+    if (tx.type === 'needs') needs += tx.amount;
+    else if (tx.type === 'release') needs -= tx.amount;
+    else if (tx.type === 'out' && tx.fromNeeds) needs -= tx.fromNeeds;
+  }
+  return Math.max(0, needs);
 }
 
 export function goalSaved(txs, goalId) {
@@ -25,27 +41,24 @@ export function goalSaved(txs, goalId) {
   return saved;
 }
 
-function median(xs) {
-  const s = [...xs].sort((a, b) => a - b);
-  const mid = Math.floor(s.length / 2);
-  return s.length % 2 ? s[mid] : Math.round((s[mid - 1] + s[mid]) / 2);
-}
+export const safetyBalance = (data) => sum(data.goals.map((g) => goalSaved(data.transactions, g.id)));
 
 /** Typical number of days between income payments, from the most recent ones. */
 export function incomeGapDays(txs) {
-  const dates = [...new Set(txs.filter((t) => t.type === 'in').map((t) => t.date))].sort();
-  if (dates.length < 2) return null;
-  const gaps = [];
-  for (let i = 1; i < dates.length; i++) gaps.push(daysBetween(dates[i - 1], dates[i]));
-  return Math.max(1, median(gaps.slice(-6)));
+  const gaps = incomeGaps(txs);
+  return gaps.length ? Math.max(1, median(gaps)) : null;
 }
 
 export function nextIncome(data, today) {
   if (data.nextIncome && data.nextIncome >= today) return { date: data.nextIncome, source: 'user' };
-  const incomes = data.transactions.filter((t) => t.type === 'in').map((t) => t.date).sort();
-  const last = incomes.at(-1);
-  const gap = incomeGapDays(data.transactions);
-  if (gap && last) {
+  const income = data.income;
+  const last = incomeDates(data.transactions).at(-1);
+  if (hasPayday(income)) return { date: nextPayday(income, today, last), source: 'payday' };
+  const gaps = incomeGaps(data.transactions);
+  if (gaps.length && last) {
+    // "It varies" plans from a longer-than-usual gap, so a late payment doesn't leave you short.
+    const cautious = !income || income.pattern === 'varies';
+    const gap = Math.max(1, cautious ? percentile(gaps, 75) : median(gaps));
     const est = addDays(last, gap);
     if (est > today) return { date: est, source: 'estimate', gap };
     return { date: addDays(today, OVERDUE_PLAN_DAYS), source: 'late', gap };
@@ -63,28 +76,57 @@ export function nextDueDate(dueDay, today) {
   return toISO(new Date(y, m + 1, Math.min(dueDay, daysInMonth(y, m + 1))));
 }
 
+const nextWeekday = (weekday, from) => addDays(from, (weekday - parseISO(from).getDay() + 7) % 7);
+
+/** Next unpaid due date. Once-off bills keep their date even when overdue. */
 export function billNextDue(bill, today) {
-  const due = nextDueDate(bill.dueDay, today);
-  if (bill.lastPaidDue && bill.lastPaidDue >= due) return nextDueDate(bill.dueDay, addDays(bill.lastPaidDue, 1));
+  if (bill.frequency === 'once') return bill.dueDate;
+  const next = bill.frequency === 'weekly' ? (from) => nextWeekday(bill.weekday, from) : (from) => nextDueDate(bill.dueDay, from);
+  const due = next(today);
+  if (bill.lastPaidDue && bill.lastPaidDue >= due) return next(addDays(bill.lastPaidDue, 1));
   return due;
+}
+
+/** Every unpaid occurrence of a bill due on or before `until` (weekly bills can fall due several times). */
+export function billOccurrences(bill, today, until) {
+  const first = billNextDue(bill, today);
+  if (bill.frequency !== 'weekly') return first <= until ? [first] : [];
+  const out = [];
+  for (let d = first; d <= until; d = addDays(d, 7)) out.push(d);
+  return out;
+}
+
+/** Bills due before a date, one entry per occurrence, with the amount to plan for. */
+export function billsDueBy(data, today, until) {
+  return data.bills
+    .flatMap((b) => {
+      const planned = plannedAmount(b, data.transactions, today);
+      return billOccurrences(b, today, until).map((due) => ({ ...b, due, planned }));
+    })
+    .sort((a, b) => a.due.localeCompare(b.due));
 }
 
 export function summarize(data, today) {
   const txs = data.transactions;
   const cash = cashAvailable(txs);
+  const needs = needsBalance(txs);
+  const safety = safetyBalance(data);
   // Bill payments aren't "daily spending": they were already set aside.
   const spentToday = sum(txs.filter((t) => t.type === 'out' && t.date === today && !t.billId).map((t) => t.amount));
   const next = nextIncome(data, today);
   const daysLeft = Math.max(1, daysBetween(today, next.date));
-  const billsDue = data.bills
-    .map((b) => ({ ...b, due: billNextDue(b, today) }))
-    .filter((b) => b.due <= next.date)
-    .sort((a, b) => a.due.localeCompare(b.due));
-  const billsTotal = sum(billsDue.map((b) => b.amount));
-  const startOfDay = cash + spentToday;
-  const perDay = Math.max(0, Math.floor((startOfDay - billsTotal) / daysLeft));
+  const billsDue = billsDueBy(data, today, next.date);
+  const billsTotal = sum(billsDue.map((b) => b.planned));
+  // Bills Needs can't cover still have to come out of free money.
+  const unfunded = Math.max(0, billsTotal - needs);
+  const free = cash - needs;
+  const perDay = Math.max(0, Math.floor((free - unfunded + spentToday) / daysLeft));
   return {
     cash,
+    needs,
+    safety,
+    free,
+    unfunded,
     spentToday,
     perDay,
     leftToday: perDay - spentToday,
@@ -120,11 +162,4 @@ export function monthlyIncomeEstimate(txs, today) {
   const from = addDays(today, -90);
   const total = sum(txs.filter((t) => t.type === 'in' && t.date > from && t.date <= today).map((t) => t.amount));
   return Math.round(total / 3);
-}
-
-/** Suggested way to divide new income: cover uncovered bills first, then pay yourself, then daily spending. */
-export function splitIncome(amount, savePercent, uncoveredBills) {
-  const bills = Math.min(amount, uncoveredBills);
-  const save = Math.floor(((amount - bills) * savePercent) / 100);
-  return { bills, save, spend: amount - bills - save, pct: savePercent };
 }

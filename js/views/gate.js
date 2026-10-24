@@ -64,7 +64,7 @@ export function onboarding(ctx) {
     try {
       await vault.create(sf.pin.value, vault.emptyData(name.value.trim().slice(0, 40)));
       ctx.savePrefs({ numericPin: sf.isNumeric() });
-      ctx.unlocked();
+      ctx.unlocked({ firstRun: true });
     } catch {
       done();
       showError(err, t('err.generic'));

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   billNextDue, cashAvailable, goalSaved, incomeGapDays, monthlyIncomeEstimate, nextDueDate, nextIncome,
-  spendingByCategory, splitIncome, summarize,
+  spendingByCategory, summarize,
 } from '../js/core/budget.js';
 import { assessLoan, effectiveAnnualRate, loanCost } from '../js/core/credit.js';
 import { addDays, daysBetween, isISODate } from '../js/core/dates.js';
@@ -125,10 +125,6 @@ describe('budget', () => {
     assert.equal(monthlyIncomeEstimate([tx('in', 30000, '2025-03-01'), tx('in', 30000, '2024-01-01')], '2025-03-10'), 10000);
   });
 
-  test('income split covers uncovered bills, then savings', () => {
-    assert.deepEqual(splitIncome(10000, 10, 4000), { bills: 4000, save: 600, spend: 5400, pct: 10 });
-    assert.deepEqual(splitIncome(1000, 10, 4000), { bills: 1000, save: 0, spend: 0, pct: 10 });
-  });
 });
 
 describe('credit', () => {

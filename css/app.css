@@ -415,3 +415,43 @@ html.privacy #app { filter: blur(18px); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+/* Bucket colours are always paired with a text label. */
+.seg-needs { background: var(--brand); }
+.seg-safety { background: var(--accent); }
+.seg-free { background: var(--ok); }
+
+.bucket-bar { display: flex; height: 18px; border-radius: 999px; overflow: hidden; background: var(--line); gap: 2px; }
+.bucket-bar span { flex: 1 1 0; min-width: 0; }
+:root.hc .bucket-bar { border: 2px solid var(--line); }
+
+.bucket-legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0 0; }
+.bucket-legend dt { font-size: 0.85rem; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.bucket-legend dd { margin: 0; font-weight: 700; }
+.swatch { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: baseline; }
+.bucket-legend .swatch { margin-right: 0; }
+
+.forecast.warn { border-left: 6px solid var(--warn); }
+.forecast.ok { border-left: 6px solid var(--ok); }
+
+.choices { border: 0; padding: 0; margin: 0 0 8px; }
+.choices legend { font-weight: 700; padding: 0; margin-bottom: 4px; }
+
+.pay-amount input { width: 7.5rem; }
+
+.demo-banner {
+  margin: 0 0 12px;
+  padding: 6px 12px;
+  border: 2px dashed var(--warn);
+  border-radius: 12px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-weight: 700;
+  text-align: center;
+}
+
+.dialog p { white-space: pre-line; }
+
+@media (max-width: 360px) {
+  .bucket-legend { grid-template-columns: 1fr; }
+}
