@@ -9,7 +9,7 @@ import { list, t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { amountInput, bulletList, card, field, formError, money, pageTitle, showError, stat } from './ui.js';
 
-const LEVEL_ICON = { ok: 'circle-check', caution: 'triangle-alert', danger: 'octagon-x' };
+const LEVEL_ICON = { ok: 'check', caution: 'alert', danger: 'stop' };
 
 export function render(ctx) {
   const est = monthlyIncomeEstimate(ctx.data.transactions, todayISO());

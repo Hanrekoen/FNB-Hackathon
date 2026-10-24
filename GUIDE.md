@@ -124,7 +124,7 @@ New South African scam types covered:
 
 ### Across the whole app ([js/app.js](js/app.js))
 - A hash router (`#/home`, `#/money`, `#/save`, `#/credit`, `#/scams`, `#/settings`, `#/profile`) with a bottom tab bar.
-- **Icons, not emoji:** every icon is an inline SVG from [Lucide](https://lucide.dev) (ISC licence), built with DOM calls by [js/icons.js](js/icons.js) from the data in [js/icon-data.js](js/icon-data.js). Nothing is fetched, so it still works offline and within the security policy. A test fails if an emoji appears anywhere in the app.
+- **Icons, not emoji:** every icon is an inline SVG adapted from [Lucide](https://lucide.dev) (ISC licence), defined and built with DOM calls in [js/icons.js](js/icons.js). Nothing is fetched, so it still works offline and within the security policy. A test fails if an emoji appears anywhere in the app.
 - **Auto-lock**, a **blur in the app switcher**, toasts, dialogs and focus management for screen readers.
 - Service worker registration, so the app works offline.
 
@@ -245,7 +245,7 @@ This copies only the files the app needs into `dist/`. `dist/` is git-ignored.
 - If you add a new file under `js/`, `css/` or `icons/`, add it to the `ASSETS` list in `sw.js`. `npm test` fails if you forget.
 - If you add a new piece of text, add its key to all three files in `js/lang/`. `npm test` fails if a key or placeholder is missing.
 - **Adding a scam rule:** add it to `RULES` in [js/core/scam.js](js/core/scam.js) with `en`, `af` and `zu` patterns (bounded repetition only), add `scam.r.<id>` and `scam.ex.<id>` in all three languages, then run `npm test` and `npm run scam-report`. The tests check that each example really triggers its rule.
-- **Adding an icon:** download the SVG from [lucide.dev](https://lucide.dev) and add its shapes to [js/icon-data.js](js/icon-data.js) in the same format.
+- **Adding an icon:** copy the SVG's shapes from [lucide.dev](https://lucide.dev) into `SHAPES` in [js/icons.js](js/icons.js), using the `path()`, `circle()` and `rect()` helpers there. `npm test` fails if the code asks for an icon that doesn't exist.
 - If you change the CSP, change it in `index.html`, `scripts/serve.mjs` and `_headers`.
 
 ---

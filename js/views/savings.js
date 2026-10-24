@@ -30,7 +30,7 @@ export function render(ctx) {
     goals.map((g) => goalCard(ctx, g, cash, today)),
     !goals.length && starterCard(ctx, s),
     newGoalCard(ctx),
-    card(['lightbulb', t('save.tipsTitle')], bulletList(list('tips.save'))));
+    card(['bulb', t('save.tipsTitle')], bulletList(list('tips.save'))));
 }
 
 function needsCard(ctx, s, today) {
@@ -135,7 +135,7 @@ function goalCard(ctx, g, cash, today) {
         trashIcon())),
     h('progress', { max: g.target, value: Math.min(g.saved, g.target), 'aria-label': t('save.progress', { pct }) }),
     h('p', { text: t('save.ofTarget', { saved: money(g.saved), target: money(g.target), pct }) }),
-    g.saved >= g.target && h('p', { class: 'alert ok with-icon' }, icon('party-popper'), t('save.reached')),
+    g.saved >= g.target && h('p', { class: 'alert ok with-icon' }, icon('party'), t('save.reached')),
     planSection(ctx, g, today),
     dateEditor(ctx, g, today),
     field(t('save.amount'), amount),
@@ -146,9 +146,9 @@ function goalCard(ctx, g, cash, today) {
 }
 
 const STATUS = {
-  onTrack: ['ok', 'circle-check'],
-  stretch: ['warn', 'triangle-alert'],
-  unrealistic: ['danger', 'octagon-x'],
+  onTrack: ['ok', 'check'],
+  stretch: ['warn', 'alert'],
+  unrealistic: ['danger', 'stop'],
   unknown: ['neutral', 'info'],
   pastDue: ['warn', 'calendar'],
 };

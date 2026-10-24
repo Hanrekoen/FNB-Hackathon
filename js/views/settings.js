@@ -62,7 +62,7 @@ function exampleCard(ctx) {
 function installCard(ctx) {
   if (ctx.install.installed()) return null;
   const canPrompt = ctx.install.available();
-  return card(['smartphone', t('settings.install')],
+  return card(['download', t('settings.install')],
     h('p', { text: t(canPrompt ? 'settings.installBody' : 'settings.installManual') }),
     canPrompt && h('button', { class: 'btn', type: 'button', on: { click: () => ctx.install.prompt() } }, t('settings.installBtn')));
 }

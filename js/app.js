@@ -18,11 +18,11 @@ import * as settings from './views/settings.js';
 
 const ROUTES = { home, money: budget, save: savings, credit, scams, settings, profile };
 const TABS = [
-  ['home', 'house'],
-  ['money', 'wallet'],
-  ['save', 'piggy-bank'],
-  ['credit', 'credit-card'],
-  ['scams', 'shield-check'],
+  ['home', 'home'],
+  ['money', 'money'],
+  ['save', 'piggy'],
+  ['credit', 'card'],
+  ['scams', 'shieldCheck'],
 ];
 
 const root = document.getElementById('app');

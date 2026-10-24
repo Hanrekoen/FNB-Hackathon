@@ -9,7 +9,7 @@ import zu from '../js/lang/zu.js';
 import { COMBO_IDS, RULE_IDS } from '../js/core/scam.js';
 import { ICONS, IN_CATS, OUT_CATS } from '../js/core/categories.js';
 import { PATTERNS } from '../js/core/income.js';
-import { ICON_DATA } from '../js/icon-data.js';
+import { ICON_NAMES } from '../js/icons.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8');
@@ -71,7 +71,7 @@ test('bucket wording never implies the bank has locked or frozen money', () => {
   }
 });
 
-test('no emoji anywhere in the app: icons come from js/icon-data.js', () => {
+test('no emoji anywhere in the app: icons come from js/icons.js', () => {
   const emoji = /[\p{Extended_Pictographic}\u{FE0F}]/u;
   for (const f of [...walk('js').filter((x) => x.endsWith('.js')), 'css/app.css', 'index.html', 'manifest.webmanifest']) {
     read(f).split('\n').forEach((line, i) => assert.doesNotMatch(line, emoji, `${f}:${i + 1}`));
@@ -83,6 +83,8 @@ test('every icon used in the code exists', () => {
   for (const f of sources) {
     const s = read(f);
     for (const m of s.matchAll(/\bicon\(\s*'([\w-]+)'/g)) used.add(m[1]);
+    // icon(cond ? 'a' : 'b')
+    for (const m of s.matchAll(/\bicon\(\s*[\w.]+ \? '([\w-]+)' : '([\w-]+)'/g)) used.add(m[1]).add(m[2]);
     // card(['name', t(...)]) and heading('h2', ['name', t(...)])
     for (const m of s.matchAll(/\b(?:card|heading)\(\s*(?:'h\d',\s*)?\['([\w-]+)',/g)) used.add(m[1]);
     const tabs = s.match(/const TABS = \[([\s\S]*?)\];/);
@@ -94,7 +96,7 @@ test('every icon used in the code exists', () => {
     if (status) for (const m of status[1].matchAll(/\['\w+', '([\w-]+)'\]/g)) used.add(m[1]);
   }
   assert.ok(used.size > 30, `only found ${used.size} icon names`);
-  assert.deepEqual([...used].filter((n) => !(n in ICON_DATA)), []);
+  assert.deepEqual([...used].filter((n) => !ICON_NAMES.includes(n)), []);
 });
 
 test('service worker precaches every app file', () => {

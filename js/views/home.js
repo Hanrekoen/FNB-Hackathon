@@ -55,14 +55,14 @@ export function render(ctx) {
     scamWeekCard(today),
 
     h('section', { class: 'card tip' },
-      heading('h2', ['lightbulb', t('home.tip')]),
+      heading('h2', ['bulb', t('home.tip')]),
       h('p', { text: tips[dayOfYear(today) % tips.length] })));
 }
 
 function scamWeekCard(today) {
   const scams = list('scam.weekly');
   return h('section', { class: 'card tip warn' },
-    heading('h2', ['message-square-warning', t('home.scamWeek')]),
+    heading('h2', ['message', t('home.scamWeek')]),
     h('p', { text: scams[weekIndex(dayOfYear(today), scams.length)] }),
     h('a', { class: 'link', href: '#/scams' }, t('home.scamCheck')));
 }
@@ -92,7 +92,7 @@ function forecastCard(d, s, today) {
     ? t('forecast.onTrack')
     : t('forecast.runOut', { date: fmtDate(f.date), n: f.gap });
   return h('section', { class: `card forecast ${f.onTrack ? 'ok' : 'warn'}`, 'aria-labelledby': 'forecast-h' },
-    heading('h2', ['telescope', t('forecast.title')], { id: 'forecast-h' }),
+    heading('h2', ['trend', t('forecast.title')], { id: 'forecast-h' }),
     h('p', { class: 'big-fact', text: message }),
     h('details', {},
       h('summary', { text: t('forecast.how') }),

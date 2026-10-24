@@ -11,7 +11,7 @@ import { list, locale, t } from '../i18n.js';
 import { icon } from '../icons.js';
 import { bulletList, card, field, fmtDate, heading, newId, pageTitle, trashIcon } from './ui.js';
 
-const LEVEL_ICON = { none: ['shield-check', 'ok'], low: ['info', 'warn'], medium: ['triangle-alert', 'warn'], high: ['octagon-alert', 'danger'] };
+const LEVEL_ICON = { none: ['shieldCheck', 'ok'], low: ['info', 'warn'], medium: ['alert', 'warn'], high: ['stop', 'danger'] };
 const QUIZ = [
   { id: 1, correct: 1 },
   { id: 2, correct: 0 },
@@ -68,7 +68,7 @@ export function render(ctx) {
     field(t('scam.label'), text, t('scam.privacy')),
     h('div', { class: 'row' },
       h('button', { class: 'btn', type: 'submit' }, t('scam.check')),
-      canPaste() && h('button', { class: 'btn secondary', type: 'button', on: { click: paste } }, icon('clipboard-paste'), t('scam.paste')),
+      canPaste() && h('button', { class: 'btn secondary', type: 'button', on: { click: paste } }, icon('paste'), t('scam.paste')),
       h('button', { class: 'btn secondary', type: 'button', on: { click: tryExample } }, icon('shuffle'), t('scam.tryExample')),
       h('button', { class: 'btn secondary', type: 'button', on: { click: clear } }, t('scam.clear'))),
     h('p', { class: 'hint', text: t('scam.version', { date: fmtDate(RULES_VERSION) }) }));
@@ -85,9 +85,9 @@ export function render(ctx) {
     savedCard(ctx, text, check),
     practiceCard(),
     signsCard(),
-    card(['shield-check', t('scam.rulesTitle')], bulletList(list('scam.rules'))),
-    card(['brain', t('quiz.title')], QUIZ.map(quizItem)),
-    card(['life-buoy', t('scam.helpTitle')], bulletList(list('scam.help')), contactList(Object.keys(CONTACTS))));
+    card(['shieldCheck', t('scam.rulesTitle')], bulletList(list('scam.rules'))),
+    card(['quiz', t('quiz.title')], QUIZ.map(quizItem)),
+    card(['lifebuoy', t('scam.helpTitle')], bulletList(list('scam.help')), contactList(Object.keys(CONTACTS))));
 }
 
 // ---------- result ----------
@@ -140,13 +140,13 @@ function stepsList(ctx, text, r) {
     h('ol', { class: 'steps' }, steps.map((s) => h('li', {},
       h('p', { text: t(`scam.step.${s.key}`) }),
       s.contacts && contactList(s.contacts),
-      s.action === 'credit' && h('button', { class: 'btn small', type: 'button', on: { click: openCredit } }, icon('credit-card'), t('scam.openCredit'))))),
+      s.action === 'credit' && h('button', { class: 'btn small', type: 'button', on: { click: openCredit } }, icon('card'), t('scam.openCredit'))))),
   ];
 }
 
 function speakButton(r) {
   if (!canSpeak()) return null;
-  const btn = h('button', { class: 'btn small secondary', type: 'button' }, icon('volume-2'), t('scam.readAloud'));
+  const btn = h('button', { class: 'btn small secondary', type: 'button' }, icon('speaker'), t('scam.readAloud'));
   btn.addEventListener('click', () => {
     const synth = window.speechSynthesis;
     if (synth.speaking) {
@@ -172,7 +172,7 @@ function resultCard(ctx, text, r) {
     h('h2', { id: 'scam-res-h', tabindex: -1, text: t('scam.result') }),
     badge(r.level),
     h('p', { class: 'big-fact', text: t(`scam.advice.${r.level}`) }),
-    r.combos.map((c) => h('p', { class: 'alert danger with-icon' }, icon('shield-alert'), t(`scam.c.${c}`))),
+    r.combos.map((c) => h('p', { class: 'alert danger with-icon' }, icon('alert'), t(`scam.c.${c}`))),
     stepsList(ctx, text, r),
     r.matches.length > 0 && h('details', { open: true },
       h('summary', { text: t('scam.why', { n: r.matches.length }) }),
@@ -241,9 +241,9 @@ function practiceCard() {
       if (correct) right++;
       const r = checkMessage(message);
       feedback.replaceChildren(
-        h('p', { class: `quiz-feedback with-icon ${correct ? 'ok' : 'danger'}` }, icon(correct ? 'check' : 'x'), `${t(correct ? 'quiz.right' : 'quiz.wrong')} ${t(isScam ? 'practice.wasScam' : 'practice.wasReal')}`),
+        h('p', { class: `quiz-feedback with-icon ${correct ? 'ok' : 'danger'}` }, icon(correct ? 'check' : 'stop'), `${t(correct ? 'quiz.right' : 'quiz.wrong')} ${t(isScam ? 'practice.wasScam' : 'practice.wasReal')}`),
         r.matches.length ? [highlighted(message, r.spans), bulletList(r.matches.map((id) => t(`scam.r.${id}`)))] : h('p', { class: 'hint', text: t('practice.noSigns') }),
-        h('button', { class: 'btn', type: 'button', on: { click: () => { i++; show(); } } }, t('practice.next'), icon('arrow-right')));
+        h('button', { class: 'btn', type: 'button', on: { click: () => { i++; show(); } } }, t('practice.next'), icon('arrowRight')));
     };
     const buttons = [
       h('button', { class: 'btn secondary quiz-opt', type: 'button', on: { click: () => answer(true) } }, t('practice.scam')),
@@ -256,7 +256,7 @@ function practiceCard() {
       feedback);
   }
   show();
-  return card(['graduation-cap', t('practice.title')], h('p', { text: t('practice.lead') }), box);
+  return card(['learn', t('practice.title')], h('p', { text: t('practice.lead') }), box);
 }
 
 /** Every warning sign the checker knows, each with a real-looking example. */
@@ -280,7 +280,7 @@ function quizItem(q) {
         buttons.forEach((b, j) => b.setAttribute('aria-pressed', String(i === j)));
         const right = i === q.correct;
         feedback.className = `quiz-feedback with-icon ${right ? 'ok' : 'danger'}`;
-        feedback.replaceChildren(icon(right ? 'check' : 'x'), `${t(right ? 'quiz.right' : 'quiz.wrong')} ${t(`quiz.${q.id}.why`)}`);
+        feedback.replaceChildren(icon(right ? 'check' : 'stop'), `${t(right ? 'quiz.right' : 'quiz.wrong')} ${t(`quiz.${q.id}.why`)}`);
       },
     },
   }, t(`quiz.${q.id}.${i ? 'b' : 'a'}`)));

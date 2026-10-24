@@ -121,7 +121,7 @@ export function heading(tag, title, props = {}) {
   return h(tag, { ...props, class: cls || null }, name && icon(name), text);
 }
 
-export const trashIcon = () => icon('trash-2');
+export const trashIcon = () => icon('trash');
 
 export function bulletList(items) {
   return h('ul', { class: 'bullets' }, items.map((x) => h('li', { text: x })));

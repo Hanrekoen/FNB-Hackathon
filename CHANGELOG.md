@@ -22,7 +22,7 @@
 ### 2. All emoji replaced with icons
 
 - Every emoji in the app was replaced with an SVG icon from [Lucide](https://lucide.dev) (free, ISC licence; the notice is kept in the file).
-  - [js/icon-data.js](js/icon-data.js) holds the shapes for 42 icons. They were downloaded once; only plain shapes were kept.
+  - *After the merge:* the app uses the team's icon set in [js/icons.js](js/icons.js), with 10 scam-check icons added in the same style. The separate `js/icon-data.js` was removed.
   - [js/icons.js](js/icons.js) builds the icons in the page, so nothing is fetched and the app still works offline and within the security policy.
 - **Where they're used:** the tab bar, the settings and lock buttons, transaction rows, loan results, card headings, delete buttons, and the language picker.
 - **Translations:** emoji were removed from 15 strings in each of the three language files.
