@@ -475,12 +475,19 @@ html.privacy #app { filter: blur(18px); }
 .seg-needs { background: var(--brand); }
 .seg-safety { background: var(--accent); }
 .seg-free { background: var(--ok); }
+/* Overspent: striped red, so it doesn't rely on colour alone. */
+.seg-over { background: repeating-linear-gradient(135deg, var(--danger) 0 6px, var(--danger-bg) 6px 9px); }
+.bucket-legend dd.neg { color: var(--danger); }
+.overspend { margin-top: 12px; font-weight: 400; }
+.overspend > p:first-child { font-weight: 700; margin: 0 0 6px; }
+.overspend .bullets { margin: 0 0 6px; }
+.overspend .hint { color: inherit; }
 
 .bucket-bar { display: flex; height: 18px; border-radius: 999px; overflow: hidden; background: var(--line); gap: 2px; }
 .bucket-bar span { flex: 1 1 0; min-width: 0; }
 :root.hc .bucket-bar { border: 2px solid var(--line); }
 
-.bucket-legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0 0; }
+.bucket-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px; margin: 10px 0 0; }
 .bucket-legend dt { font-size: 0.85rem; color: var(--muted); display: flex; align-items: center; gap: 6px; }
 .bucket-legend dd { margin: 0; font-weight: 700; }
 .swatch { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: baseline; }

@@ -803,4 +803,16 @@ export default {
   'setup.rerunBody': 'Walk through your pay, bills, safety net and goals again. Nothing is deleted.',
   'setup.firstIncome.title': 'Add your first income',
   'setup.firstIncome.body': 'When money comes in, record it here. Imali covers your bills first and shows what\'s safe to spend.',
+
+  // Overspending
+  'bucket.over': 'Overspent',
+  'bucket.overTitle': 'You have spent {amount} more than your free money.',
+  'bucket.overSaving': '{amount} of it was set aside for saving this month.',
+  'bucket.overNeeds': '{amount} of it was set aside for your bills, so those bills are now short.',
+  'bucket.overFix': 'Spend only on essentials until your next income. If money came in that you didn\'t record, add it under Money in.',
+  'coach.over.saving': '{amount} of it would come from money set aside for saving this month.',
+  'coach.over.behind': 'That is {amount} more than you have, so you would be {amount} behind until more money comes in.',
+  'bucket.debtTitle': 'You\'re {amount} in debt: you\'ve spent {amount} more than you have.',
+  'bucket.alsoSaving': 'You also used {amount} that was set aside for saving this month.',
+  'bucket.alsoNeeds': 'You also used {amount} that was set aside for your bills, so those bills are now short.',
 };

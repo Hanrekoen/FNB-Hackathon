@@ -793,4 +793,16 @@ export default {
   'setup.rerunBody': 'Gaan weer deur jou betaling, rekeninge, veiligheidsnet en doelwitte. Niks word uitgevee nie.',
   'setup.firstIncome.title': 'Voeg jou eerste inkomste by',
   'setup.firstIncome.body': 'Wanneer geld inkom, teken dit hier aan. Imali dek eers jou rekeninge en wys wat veilig is om te spandeer.',
+
+  // Overspending
+  'bucket.over': 'Te veel bestee',
+  'bucket.overTitle': 'Jy het {amount} meer bestee as jou vry geld.',
+  'bucket.overSaving': '{amount} daarvan was eenkant gesit om hierdie maand te spaar.',
+  'bucket.overNeeds': '{amount} daarvan was vir jou rekeninge eenkant gesit, so daardie rekeninge kom nou kort.',
+  'bucket.overFix': 'Bestee net aan noodsaaklikhede tot jou volgende inkomste. As geld ingekom het wat jy nie aangeteken het nie, voeg dit by onder Geld in.',
+  'coach.over.saving': '{amount} daarvan sou kom uit geld wat eenkant gesit is om hierdie maand te spaar.',
+  'coach.over.behind': 'Dit is {amount} meer as wat jy het, so jy sou {amount} agter wees tot meer geld inkom.',
+  'bucket.debtTitle': 'Jy is {amount} in die skuld: jy het {amount} meer bestee as wat jy het.',
+  'bucket.alsoSaving': 'Jy het ook {amount} gebruik wat eenkant gesit was om hierdie maand te spaar.',
+  'bucket.alsoNeeds': 'Jy het ook {amount} gebruik wat vir jou rekeninge eenkant gesit was, so daardie rekeninge kom nou kort.',
 };

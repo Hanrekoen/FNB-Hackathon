@@ -8,7 +8,7 @@ import { h } from '../dom.js';
 import { icon } from '../icons.js';
 import { list, t } from '../i18n.js';
 import { loadExample } from './example.js';
-import { actionText, bucketBar, noticeCard, card, daysText, fmtDate, heading, money, pageTitle, sortTx, txList, weekdayName } from './ui.js';
+import { actionText, bucketBar, noticeCard, overspendNote, card, daysText, fmtDate, heading, money, pageTitle, sortTx, txList, weekdayName } from './ui.js';
 
 const SOURCE_NOTE = { estimate: 'home.estimated', late: 'home.late', default: 'home.guess', payday: 'home.payday' };
 
@@ -145,7 +145,7 @@ function bucketsCard(s) {
   return h('section', { class: 'card', 'aria-labelledby': 'buckets-h' },
     h('h2', { id: 'buckets-h', text: t('bucket.title') }),
     bucketBar(s),
-    h('p', { class: 'hint', text: s.needs > 0 ? t('bucket.guarding', { amount: money(s.needs) }) : t('bucket.noneGuarded') }),
+    overspendNote(s) ?? h('p', { class: 'hint', text: s.needs > 0 ? t('bucket.guarding', { amount: money(s.needs) }) : t('bucket.noneGuarded') }),
     h('a', { class: 'link', href: '#/save' }, t('bucket.manage')));
 }
 

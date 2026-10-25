@@ -144,6 +144,18 @@ export function billsDueBy(data, today, until) {
     .sort((a, b) => a.due.localeCompare(b.due));
 }
 
+/**
+ * When more has been spent than the free money, where the extra came from: first money set
+ * aside for this month's saving, then money set aside for bills, and past that, money that
+ * isn't there at all (`behind`). All zero when free money isn't negative.
+ */
+export function overspendOf({ cash, needs, earmarked, free }) {
+  const overspent = Math.max(0, -free);
+  const fromSaving = Math.min(earmarked, overspent);
+  const fromNeeds = Math.min(needs, overspent - fromSaving);
+  return { overspent, fromSaving, fromNeeds, behind: Math.max(0, -cash) };
+}
+
 export function summarize(data, today) {
   const txs = data.transactions;
   const cash = cashAvailable(txs);
@@ -172,6 +184,7 @@ export function summarize(data, today) {
     safety,
     earmarked,
     free,
+    overspend: overspendOf({ cash, needs, earmarked, free }),
     unfunded,
     covered,
     horizon,

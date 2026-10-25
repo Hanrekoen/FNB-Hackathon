@@ -1,3 +1,4 @@
+import { overspendOf, summarize } from '../core/budget.js';
 import { deleteTransaction } from '../core/buckets.js';
 import { ICONS } from '../core/categories.js';
 import { spendingConsequence } from '../core/coach.js';
@@ -95,8 +96,10 @@ export function stat(label, value, cls = '') {
 }
 
 /** Needs / Safety / Free as a stacked bar, with a text legend so colour is never the only signal. */
-export function bucketBar({ needs, safety, free }) {
+export function bucketBar({ needs, safety, free, overspend }) {
   const parts = [['needs', needs], ['safety', safety], ['free', Math.max(0, free)]];
+  // Spending past the free money shows as its own red part, instead of quietly reading R0.
+  if (overspend?.overspent > 0) parts.push(['over', overspend.overspent]);
   const total = parts.reduce((a, [, v]) => a + v, 0);
   const bar = h('div', { class: 'bucket-bar', 'aria-hidden': 'true' }, parts.map(([k, v]) => {
     const seg = h('span', { class: `seg-${k}` });
@@ -108,7 +111,31 @@ export function bucketBar({ needs, safety, free }) {
     bar,
     h('dl', { class: 'bucket-legend' }, parts.map(([k, v]) => h('div', {},
       h('dt', {}, h('span', { class: `swatch seg-${k}`, 'aria-hidden': 'true' }), t(`bucket.${k}`)),
-      h('dd', { text: money(v) })))));
+      h('dd', { class: k === 'over' ? 'neg' : null, text: k === 'over' ? `−${money(v)}` : money(v) })))));
+}
+
+/**
+ * After overspending: how far over, what the extra came out of, and what to do. Null if not
+ * over. Spending more than you have at all (debt) leads, because it's the most serious part.
+ */
+export function overspendNote({ overspend: o }) {
+  if (!o || o.overspent <= 0) return null;
+  const inDebt = o.behind > 0;
+  const lines = inDebt
+    ? [
+      o.fromSaving > 0 && t('bucket.alsoSaving', { amount: money(o.fromSaving) }),
+      o.fromNeeds > 0 && t('bucket.alsoNeeds', { amount: money(o.fromNeeds) }),
+    ]
+    : [
+      o.fromSaving > 0 && t('bucket.overSaving', { amount: money(o.fromSaving) }),
+      o.fromNeeds > 0 && t('bucket.overNeeds', { amount: money(o.fromNeeds) }),
+    ];
+  return h('div', { class: 'alert danger overspend', role: 'status' },
+    h('p', { class: 'with-icon' }, icon('alert'), inDebt
+      ? t('bucket.debtTitle', { amount: money(o.behind) })
+      : t('bucket.overTitle', { amount: money(o.overspent) })),
+    lines.some(Boolean) && bulletList(lines.filter(Boolean)),
+    h('p', { class: 'hint', text: t('bucket.overFix') }));
 }
 
 /** A card with a heading; pass [iconName, text] as the title for a leading icon. */
@@ -180,18 +207,26 @@ export function actionText(a, next) {
  * needed for bills, spell out the consequences and let the user decide. Resolves true to go on.
  */
 export async function confirmConsequence(ctx, amount, kind = 'spend') {
-  const c = spendingConsequence(ctx.data, amount, todayISO());
+  const today = todayISO();
+  const c = spendingConsequence(ctx.data, amount, today);
   if (c.fromBillMoney <= 0) return true;
   const verb = kind === 'save' ? 'coach.save' : 'coach.spend';
   const [first, ...more] = c.affected;
   const [want] = c.wants;
+  // Past the free money, say what the extra really comes out of. With the bills already paid
+  // it isn't bill money: it's this month's saving, then money that isn't there.
+  const s = summarize(ctx.data, today);
+  const o = overspendOf({ ...s, cash: s.cash - amount, free: s.free - amount });
+  const billLine = first
+    ? t(`${verb}.short`, { amount: money(amount), short: money(first.short), bill: first.name, billAmount: money(first.planned), date: fmtDate(first.due) })
+    : want
+      ? t('coach.spend.wantShort', { bill: want.name, short: money(want.short), date: fmtDate(want.due) })
+      : (o.fromNeeds > 0 || o.overspent === 0) && t('coach.spend.fromBills', { amount: money(o.fromNeeds || c.fromBillMoney) });
   const lines = [
-    first
-      ? t(`${verb}.short`, { amount: money(amount), short: money(first.short), bill: first.name, billAmount: money(first.planned), date: fmtDate(first.due) })
-      : want
-        ? t('coach.spend.wantShort', { bill: want.name, short: money(want.short), date: fmtDate(want.due) })
-        : t('coach.spend.fromBills', { amount: money(c.fromBillMoney) }),
+    billLine,
     ...more.map((b) => t('coach.spend.bill', { bill: b.name, short: money(b.short), date: fmtDate(b.due) })),
+    kind === 'spend' && o.fromSaving > 0 && t('coach.over.saving', { amount: money(o.fromSaving) }),
+    o.behind > 0 && t('coach.over.behind', { amount: money(o.behind) }),
     c.shortBefore > 0 && t('coach.spend.alreadyShort', { amount: money(c.shortBefore), date: fmtDate(c.nextIncome) }),
     t('coach.spend.yourCall'),
   ].filter(Boolean);

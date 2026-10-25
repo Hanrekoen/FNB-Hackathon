@@ -794,4 +794,16 @@ export default {
   'setup.rerunBody': 'Phinda udlule ekuholweni, ezikweletini, enethini yokuphepha nasemigomweni. Akukho okususwayo.',
   'setup.firstIncome.title': 'Faka iholo lakho lokuqala',
   'setup.firstIncome.body': 'Uma kungena imali, yibhale lapha. I-Imali imboza izikweletu zakho kuqala futhi ikhombise okuphephile ukukusebenzisa.',
+
+  // Overspending
+  'bucket.over': 'Usebenzise ngokweqile',
+  'bucket.overTitle': 'Usebenzise u-{amount} ngaphezu kwemali yakho ekhululekile.',
+  'bucket.overSaving': 'U-{amount} wayo ubebekelwe eceleni ukonga kule nyanga.',
+  'bucket.overNeeds': 'U-{amount} wayo ubebekelwe izikweletu zakho, ngakho lezo zikweletu manje azanele.',
+  'bucket.overFix': 'Sebenzisa imali ezintweni ezibalulekile kuphela kuze kufike imali yakho elandelayo. Uma kukhona imali engenile ongayibhalanga, yengeze ngaphansi kokuthi Imali engenayo.',
+  'coach.over.saving': 'U-{amount} wayo ubuzophuma emalini ebekelwe eceleni ukonga kule nyanga.',
+  'coach.over.behind': 'Lokho kungu-{amount} ngaphezu kwalokho onakho, ngakho ubuzosalela emuva ngo-{amount} kuze kungene enye imali.',
+  'bucket.debtTitle': 'Usesikweletini ngo-{amount}: usebenzise u-{amount} ngaphezu kwalokho onakho.',
+  'bucket.alsoSaving': 'Uphinde wasebenzisa u-{amount} obebekelwe eceleni ukonga kule nyanga.',
+  'bucket.alsoNeeds': 'Uphinde wasebenzisa u-{amount} obebekelwe izikweletu zakho, ngakho lezo zikweletu manje azanele.',
 };

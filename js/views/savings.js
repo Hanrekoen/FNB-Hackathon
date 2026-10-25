@@ -12,7 +12,7 @@ import { h } from '../dom.js';
 import { list, t } from '../i18n.js';
 import { icon } from '../icons.js';
 import {
-  amountInput, bucketBar, bulletList, card, confirmConsequence, field, fmtDate, fmtDateTime, formError, money, heading, newId, pageTitle, select, showError, stat, trashIcon,
+  amountInput, bucketBar, bulletList, card, confirmConsequence, field, fmtDate, fmtDateTime, formError, money, heading, newId, overspendNote, pageTitle, select, showError, stat, trashIcon,
 } from './ui.js';
 
 export function render(ctx) {
@@ -26,7 +26,7 @@ export function render(ctx) {
 
   return h('div', { class: 'stack' },
     pageTitle(t('save.title'), t('save.lead')),
-    h('section', { class: 'card' }, bucketBar(s)),
+    h('section', { class: 'card' }, bucketBar(s), overspendNote(s)),
     needsCard(ctx, s, today),
     h('div', { class: 'card stats' }, stat(t('save.total'), money(s.safety), 'pos'), stat(t('save.cash'), money(cash))),
     ruleCard(ctx),
