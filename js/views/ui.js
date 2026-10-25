@@ -124,6 +124,48 @@ export function heading(tag, title, props = {}) {
 
 export const trashIcon = () => icon('trash');
 
+const LEVEL_ICON = { danger: 'stop', warn: 'alert', info: 'info' };
+
+function noticeText(n) {
+  const v = n.vars;
+  if (n.id === 'earmarkUsed') return t('notice.earmarkUsed', { used: money(v.used), perDay: money(v.perDay), date: fmtDate(v.date) });
+  if (n.id === 'protectSaving') {
+    return v.goal
+      ? t('notice.protectSaving', { earmarked: money(v.earmarked), goal: v.goal, perDay: money(v.perDay) })
+      : t('notice.protectSavingSafety', { earmarked: money(v.earmarked), perDay: money(v.perDay) });
+  }
+  if (n.id === 'monthEndSoon') {
+    return v.goal
+      ? t('notice.monthEndSoon', { days: v.days, emergency: money(v.emergency), goalAmount: money(v.goalAmount), goal: v.goal, date: fmtDate(v.date) })
+      : t('notice.monthEndSoonSafety', { days: v.days, emergency: money(v.emergency), date: fmtDate(v.date) });
+  }
+  return t('notice.overPace', { category: t(`cat.${v.category}`) });
+}
+
+function noticeActionText(a) {
+  return a.kind === 'pauseWant'
+    ? t('notice.action.pauseWant', { name: a.name, amount: money(a.amount) })
+    : t('notice.action.cut', { cut: money(a.cut), category: t(`cat.${a.category}`) });
+}
+
+/**
+ * A spending notice: what is happening, what to do next, and the numbers behind it. "Got it"
+ * hides it for today. `compact` is the top banner shown when the app opens on another tab.
+ */
+export function noticeCard(ctx, n, compact = false) {
+  const e = n.evidence;
+  const dismiss = () => ctx.commit((d) => { d.noticeDismissed = { id: n.id, date: todayISO() }; });
+  return h('section', { class: `card notice ${n.level} ${compact ? 'compact' : ''}`, role: 'status' },
+    h('p', { class: 'with-icon' }, icon(LEVEL_ICON[n.level], { cls: n.level }), noticeText(n)),
+    h('div', { class: 'row' },
+      n.action && h('a', { class: 'btn small secondary', href: '#/money' }, noticeActionText(n.action)),
+      h('button', { class: 'btn small', type: 'button', on: { click: dismiss } }, t('notice.gotIt'))),
+    !compact && h('details', {},
+      h('summary', { text: t('notice.why') }),
+      h('p', { text: t('notice.numbers', { cash: money(e.cash), needs: money(e.needs), earmarked: money(e.earmarked), pace: money(e.pace), days: e.daysToMonthEnd }) }),
+      e.week !== undefined && h('p', { text: t('notice.numbersWeek', { week: money(e.week), usual: money(e.usual) }) })));
+}
+
 /** A coach action as a plain sentence; `next` is the next income date. */
 export function actionText(a, next) {
   const date = fmtDate(next);

@@ -1,7 +1,7 @@
 // Offline-first service worker: the whole app is cached on first visit, so it opens with
 // no signal and uses no data afterwards. Bump VERSION whenever any app file changes.
 
-const VERSION = 'imali-v7';
+const VERSION = 'imali-v11';
 const ASSETS = [
   './',
   './index.html',
@@ -32,6 +32,8 @@ const ASSETS = [
   './js/core/scam.js',
   './js/core/schema.js',
   './js/core/security.js',
+  './js/core/setup.js',
+  './js/core/sweep.js',
   './js/lang/af.js',
   './js/lang/en.js',
   './js/lang/zu.js',
@@ -44,6 +46,7 @@ const ASSETS = [
   './js/views/savings.js',
   './js/views/scams.js',
   './js/views/settings.js',
+  './js/views/setup.js',
   './js/views/ui.js',
   './icons/apple-touch-icon.png',
   './icons/icon-192.png',

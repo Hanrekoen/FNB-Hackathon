@@ -12,13 +12,16 @@ const id = () => `id-${++n}`;
 const TODAY = '2026-11-02'; // a Monday
 const NOW = new Date('2026-11-02T10:00').getTime();
 
-/** The worked example from the spec: rent R1 200 on the 10th, data R99 every Wednesday, next income in 14 days. */
+/**
+ * The worked example from the spec: rent R1 200 on the 10th and R198 of data on the 4th (both
+ * within the 30-day bill window), next income in 14 days.
+ */
 function lerato(over = {}) {
   const d = emptyData('Lerato', TODAY);
   d.nextIncome = '2026-11-16';
   d.bills = [
-    { id: 'rent', name: 'Rent', amount: 120_000, frequency: 'monthly', dueDay: 10, amountType: 'fixed', lastPaidDue: null },
-    { id: 'data', name: 'Data', amount: 9_900, frequency: 'weekly', weekday: 3, amountType: 'fixed', lastPaidDue: null },
+    { id: 'rent', name: 'Rent', amount: 120_000, frequency: 'monthly', dueDay: 10, amountType: 'fixed', kind: 'essential', lastPaidDue: null },
+    { id: 'data', name: 'Data', amount: 19_800, frequency: 'monthly', dueDay: 4, amountType: 'fixed', kind: 'essential', lastPaidDue: null },
   ];
   return Object.assign(d, over);
 }
@@ -28,90 +31,66 @@ function receive(d, amount) {
   return allocate(d, amount, TODAY);
 }
 
-describe('income allocation waterfall', () => {
-  test('worked example: R2 400 with R1 398 of needs due', () => {
+const gym = { id: 'gym', name: 'Gym', amount: 30_000, frequency: 'monthly', dueDay: 20, amountType: 'fixed', kind: 'want', lastPaidDue: null };
+
+describe('income allocation: bills first, saving earmarked for month-end', () => {
+  test('worked example: R2 400 with R1 398 of bills due', () => {
     const d = lerato();
     const a = receive(d, 240_000);
-    assert.equal(a.needs, 139_800);
-    assert.equal(a.safety, 10_020);
-    assert.equal(a.free, 90_180);
-    applyAllocation(d, a, TODAY, 'Emergency fund', id);
+    assert.deepEqual([a.needs, a.needsEssential, a.needsWant, a.earmarkEmergency, a.free], [139_800, 139_800, 0, 10_020, 90_180]);
+    applyAllocation(d, a, TODAY, id);
     const s = summarize(d, TODAY);
     assert.equal(s.needs, 139_800);
-    assert.equal(s.safety, 10_020);
+    assert.equal(s.earmarked, 10_020);
+    assert.equal(s.safety, 0, 'nothing moves to savings until month-end');
     assert.equal(s.free, 90_180);
-    assert.equal(s.perDay, 6_441); // R901,80 / 14
-    assert.equal(d.goals[0].kind, 'emergency');
+    assert.equal(s.perDay, 6_441); // R901,80 / 14, the same as before earmarks
+    assert.deepEqual(d.earmarks.map((e) => [e.month, e.kind, e.amount]), [['2026-11', 'emergency', 10_020]]);
   });
 
-  test('a small income goes entirely to needs', () => {
+  test('a small income goes entirely to bills', () => {
     const a = receive(lerato(), 50_000);
-    assert.deepEqual([a.needs, a.safety, a.free], [50_000, 0, 0]);
+    assert.deepEqual([a.needs, a.earmarkEmergency, a.free], [50_000, 0, 0]);
   });
 
-  test('needs already set aside are not topped up twice', () => {
+  test('bills already covered are not topped up twice', () => {
     const d = lerato();
     d.transactions.push({ id: id(), type: 'in', amount: 139_800, date: TODAY, category: 'gig' });
     d.transactions.push({ id: id(), type: 'needs', amount: 139_800, date: TODAY, category: 'needs' });
     const a = receive(d, 100_000);
     assert.equal(a.needs, 0);
-    assert.equal(a.safety, 10_000);
+    assert.equal(a.earmarkEmergency, 10_000);
   });
 
-  test('no savings once every goal is reached', () => {
-    const d = lerato({ goals: [{ id: 'e', name: 'Emergency', target: 10_000, kind: 'emergency' }] });
-    d.transactions.push({ id: id(), type: 'in', amount: 10_000, date: TODAY, category: 'gig' });
-    d.transactions.push({ id: id(), type: 'save', amount: 10_000, goalId: 'e', date: TODAY, category: 'save' });
+  test('want bills are covered after essentials and before any earmark', () => {
+    const d = lerato();
+    d.bills.push(gym);
     const a = receive(d, 240_000);
-    assert.equal(a.safety, 0);
-    assert.equal(a.free, 240_000 - 139_800);
+    assert.deepEqual([a.needsEssential, a.needsWant, a.earmarkEmergency, a.free], [139_800, 30_000, 7_020, 63_180]);
+    const small = lerato();
+    small.bills.push(gym);
+    const b = receive(small, 150_000);
+    assert.deepEqual([b.needsEssential, b.needsWant, b.earmarkEmergency], [139_800, 10_200, 0]);
   });
 
-  test('dated goals get their per-payday amount after the savings %', () => {
+  test('an accepted goal plan earmarks its monthly amount; other goals do not', () => {
     const d = lerato({ goals: [
-      { id: 'em', name: 'Emergency', target: 100_000, kind: 'emergency' },
-      { id: 'hol', name: 'Holiday', target: 40_000, kind: 'goal', by: '2026-11-30' }, // 4 weeks: R100 a week
+      { id: 'hol', name: 'Holiday', target: 200_000, kind: 'goal', by: '2026-12-28', plan: { cuts: [], perContribution: 10_000, acceptedAt: 1 } },
+      { id: 'shoes', name: 'Shoes', target: 50_000, kind: 'goal', by: '2026-12-01' },
     ] });
     const a = receive(d, 240_000);
-    assert.equal(a.needs, 139_800);
-    assert.equal(a.safety, 10_020);
-    assert.deepEqual(a.goals, [{ goalId: 'hol', name: 'Holiday', amount: 10_000 }]);
-    assert.equal(a.free, 240_000 - 139_800 - 10_020 - 10_000);
-    applyAllocation(d, a, TODAY, 'Emergency fund', id);
-    assert.equal(safetyBalance(d), 20_020);
+    // R100 a week is R433,34 a month; this one income is the whole month's income so far
+    assert.deepEqual(a.earmarkGoals, [{ goalId: 'hol', name: 'Holiday', amount: 43_334 }]);
+    assert.equal(a.free, 240_000 - 139_800 - 10_020 - 43_334);
+    applyAllocation(d, a, TODAY, id);
     assert.equal(summarize(d, TODAY).free, a.free);
   });
 
-  test('nearest deadline first, never more than the free money', () => {
-    const d = lerato({ goals: [
-      { id: 'em', name: 'Emergency', target: 100_000, kind: 'emergency' },
-      { id: 'later', name: 'Later', target: 80_000, kind: 'goal', by: '2026-12-28' },
-      { id: 'soon', name: 'Soon', target: 40_000, kind: 'goal', by: '2026-11-30' },
-    ] });
-    const a = receive(d, 145_000);
-    assert.equal(a.safety, 520);
-    assert.deepEqual(a.goals, [{ goalId: 'soon', name: 'Soon', amount: 4_680 }]);
-    assert.equal(a.free, 0);
-  });
-
-  test('a full emergency fund stops the savings %, but dated goals still get theirs', () => {
-    const d = lerato({ goals: [
-      { id: 'em', name: 'Emergency', target: 10_000, kind: 'emergency' },
-      { id: 'hol', name: 'Holiday', target: 40_000, kind: 'goal', by: '2026-11-30' },
-    ] });
-    d.transactions.push({ id: id(), type: 'in', amount: 10_000, date: TODAY, category: 'gig' });
-    d.transactions.push({ id: id(), type: 'save', amount: 10_000, goalId: 'em', date: TODAY, category: 'save' });
+  test('never sets aside more than the cash on hand', () => {
+    const d = lerato();
+    d.transactions.push({ id: id(), type: 'out', amount: 200_000, date: TODAY, category: 'debt' });
     const a = receive(d, 240_000);
-    assert.equal(a.safety, 0);
-    assert.equal(a.goals[0].amount, 10_000);
-  });
-
-  test('with only dated goals, the savings % starts an emergency fund', () => {
-    const d = lerato({ goals: [{ id: 'hol', name: 'Holiday', target: 40_000, kind: 'goal', by: '2026-11-30' }] });
-    const a = receive(d, 240_000);
-    assert.equal(a.safety, 10_020);
-    applyAllocation(d, a, TODAY, 'Emergency fund', id);
-    assert.equal(d.goals.filter((g) => g.kind === 'emergency').length, 1);
+    assert.deepEqual([a.needs, a.earmarkEmergency, a.free], [40_000, 0, 200_000]);
   });
 
   test('without set-aside needs, unfunded bills still come out of free money', () => {
@@ -126,7 +105,7 @@ describe('income allocation waterfall', () => {
 describe('paying bills', () => {
   test('draws from needs first, then free money', () => {
     const d = lerato();
-    applyAllocation(d, receive(d, 240_000), TODAY, 'Emergency fund', id);
+    applyAllocation(d, receive(d, 240_000), TODAY, id);
     payBill(d, 'rent', '2026-11-10', 120_000, TODAY, id);
     assert.equal(needsBalance(d.transactions), 19_800);
     payBill(d, 'data', '2026-11-04', 30_000, TODAY, id);
@@ -148,7 +127,7 @@ describe('paying bills', () => {
 describe('needs release', () => {
   function funded() {
     const d = lerato();
-    applyAllocation(d, receive(d, 240_000), TODAY, 'Emergency fund', id);
+    applyAllocation(d, receive(d, 240_000), TODAY, id);
     return d;
   }
 
@@ -196,8 +175,8 @@ describe('needs release', () => {
     const late = new Date('2026-11-08T10:00').getTime();
     const w = releaseWarning(d, 50_000, '2026-11-08', late);
     assert.equal(w.bill.name, 'Rent');
-    // Rent R1 200 + data R99 due by the 11th, R898 left after releasing R500
-    assert.equal(w.short, 40_100);
+    // Rent R1 200 due by the 11th, R898 left after releasing R500
+    assert.equal(w.short, 30_200);
   });
 });
 
@@ -209,11 +188,11 @@ describe('safety withdrawal consequence', () => {
     d.transactions.push({ id: id(), type: 'in', amount: 80_000, date: TODAY, category: 'gig' });
     d.transactions.push({ id: id(), type: 'save', amount: 80_000, goalId: 'e', date: TODAY, category: 'save' });
     assert.equal(safetyBalance(d), 80_000);
-    assert.deepEqual(safetyConsequence(d, 50_000, TODAY), { before: 80_000, after: 30_000, daysBefore: 6, daysAfter: 2 });
+    assert.deepEqual(safetyConsequence(d, 50_000, TODAY), { before: 80_000, after: 30_000, daysBefore: 6, daysAfter: 2, monthsBefore: 0.2, monthsAfter: 0 });
   });
 
   test('without bills or spending, days are unknown', () => {
-    assert.deepEqual(safetyConsequence(emptyData('', TODAY), 1_000, TODAY), { before: 0, after: 0, daysBefore: null, daysAfter: null });
+    assert.deepEqual(safetyConsequence(emptyData('', TODAY), 1_000, TODAY), { before: 0, after: 0, daysBefore: null, daysAfter: null, monthsBefore: null, monthsAfter: null });
   });
 });
 
@@ -226,7 +205,7 @@ describe('deleting an income after its split', () => {
     const income = { id: 'pay', type: 'in', amount: 200_000, category: 'wages', note: '', date: TODAY };
     d.transactions.push(income);
     const plan = allocate(d, 200_000, TODAY, linkIncome ? 'pay' : null);
-    applyAllocation(d, plan, TODAY, 'Emergency fund', id);
+    applyAllocation(d, plan, TODAY, id);
     assert.equal(needsBalance(d.transactions), 120_000);
     return { d, result: deleteTransaction(d, 'pay', TODAY, id) };
   }
@@ -249,23 +228,23 @@ describe('deleting an income after its split', () => {
     assert.equal(d.transactions.at(-1).correction, true);
   });
 
-  test('also removes the money the split put towards dated goals', () => {
+  test('also removes the month-end earmarks made from that income', () => {
     const d = lerato({ goals: [
-      { id: 'em', name: 'Emergency', target: 100_000, kind: 'emergency' },
-      { id: 'hol', name: 'Holiday', target: 40_000, kind: 'goal', by: '2026-11-30' },
+      { id: 'hol', name: 'Holiday', target: 200_000, kind: 'goal', by: '2026-12-28', plan: { cuts: [], perContribution: 10_000, acceptedAt: 1 } },
     ] });
     d.transactions.push({ id: 'pay', type: 'in', amount: 240_000, category: 'allowance', note: '', date: TODAY });
-    applyAllocation(d, allocate(d, 240_000, TODAY, 'pay'), TODAY, 'Emergency fund', id);
-    assert.equal(safetyBalance(d), 10_020 + 10_000);
+    applyAllocation(d, allocate(d, 240_000, TODAY, 'pay'), TODAY, id);
+    assert.equal(summarize(d, TODAY).earmarked, 10_020 + 43_334);
     const result = deleteTransaction(d, 'pay', TODAY, id);
-    assert.equal(result.linked.length, 3, 'needs, emergency fund and holiday');
-    assert.equal(safetyBalance(d), 0);
+    assert.equal(result.linked.length, 3, 'needs, the emergency earmark and the holiday earmark');
+    assert.deepEqual(d.earmarks, []);
+    assert.equal(summarize(d, TODAY).earmarked, 0);
     assert.equal(d.transactions.length, 0);
   });
 
   test('deleting other entries leaves Needs alone', () => {
     const d = lerato();
-    applyAllocation(d, receive(d, 240_000), TODAY, 'Emergency fund', id);
+    applyAllocation(d, receive(d, 240_000), TODAY, id);
     const spend = { id: 'snack', type: 'out', amount: 2_000, category: 'food', note: '', date: TODAY };
     d.transactions.push(spend);
     const before = needsBalance(d.transactions);

@@ -14,7 +14,7 @@ Imali (isiZulu/isiXhosa for "money") is a money companion for people with **irre
 
 ### First run and lock screen ([js/views/gate.js](js/views/gate.js))
 - **Onboarding:** pick a language, enter a name (optional) and choose a PIN of at least 6 characters. Weak PINs such as `123456`, `111111` or `121212` are rejected.
-- **How you're paid** ([js/views/profile.js](js/views/profile.js)): straight after setup, the user says whether they're paid monthly (on a given day), every two weeks, weekly, or "it varies". They can skip this and change it later.
+- **Guided setup** ([js/views/setup.js](js/views/setup.js), logic in [js/core/setup.js](js/core/setup.js)): straight after the PIN, every route shows the setup and the tab bar is hidden until it is finished. Steps: **Welcome** ("Set up my money" or "Explore with example data"), **Pay** (monthly on a given day, every two weeks, weekly or "it varies"; skippable), **Bills** (at least one bill, or "I don't have any bills right now", with a running monthly total split into essentials and wants), **Safety net** (on by default, months selector, estimated target), **Goal** (optional) and **Summary**. "Go to Imali" opens Home with an "Add your first income" prompt. The step is saved in the vault (`data.setup`), so locking or reloading resumes it. Data from before setup existed is marked done if it has any transactions, bills or goals.
 - **Restore:** a backup file can be restored on a new phone from the same screen.
 - **Unlock:** after the first run, the app always opens on the PIN screen. After 5 wrong tries it makes you wait (30 s, doubling each time up to 1 hour). There is an optional setting to erase all data after 10 wrong tries.
 
@@ -23,8 +23,9 @@ Imali (isiZulu/isiXhosa for "money") is a money companion for people with **irre
 - **Where your money is:** a bar showing the three buckets (see below).
 - **Looking ahead:** a run-out forecast ("at this pace you run out on the 3rd, 5 days before your next income") and the user's biggest spending weekday. Each one has a "How we worked this out" section that shows the numbers it used.
 - **A nudge** when the user's real income timing doesn't match how they said they're paid.
+- **A spending notice** (see Money coach) with its evidence, one action and "Got it", and a **month-end card** showing what last month's sweep moved.
 - **Bills due before the next income**, recent transactions, **scam of the week** and a daily money tip.
-- **Load example data:** on an empty app, one tap loads six weeks of a student's money so judges can explore straight away. A banner says it's example data, and Settings clears it.
+- **Add your first income** after setup, or **Load example data:** on an empty app, one tap loads six weeks of a student's money so judges can explore straight away. A banner says it's example data, and Settings clears it.
 
 ### Money / budget ([js/views/budget.js](js/views/budget.js), logic in [js/core/budget.js](js/core/budget.js), [js/core/income.js](js/core/income.js), [js/core/forecast.js](js/core/forecast.js))
 Imali does not use a monthly budget, because a monthly budget doesn't fit someone whose pay is irregular. It works like this instead:
@@ -51,22 +52,30 @@ The screen also has:
 - **This month** and a **history** list.
 - **Deleting an income also undoes its split.** The Needs and Safety amounts set aside from it are removed with it, and the confirm dialog says how much. For older data with no link, Needs is trimmed so it can never hold more than the cash really there.
 
+### Income split and month-end sweep ([js/core/buckets.js](js/core/buckets.js), [js/core/sweep.js](js/core/sweep.js))
+When money comes in, Imali splits it in a fixed order:
+1. **Essential bills** due in the next 30 days (or until the next income, if that's later), until they are fully covered.
+2. **Want bills** (other debit orders) in the same window.
+3. **An earmark** of the savings % for month-end, and each accepted goal plan's share. Earmarks stay in the account but are excluded from safe-to-spend.
+4. **The rest** is free to spend.
+
+The first time the app opens after a month ends (there are no background jobs), the **month-end sweep** moves that month's earmarks into the emergency fund (dated the last day of the month), then gives accepted goal plans their monthly amount, nearest deadline first. It never takes bill money, keeps a living buffer for food, transport, airtime and health until the next income, and redirects the emergency share to goals once the fund is full. If spending ate into the earmark, the shortfall is recorded and shown on Home. Each month is swept once (`data.sweeps`).
+
 ### Money coach ([js/core/coach.js](js/core/coach.js))
 Imali "thinks" in a fixed order: **needs** due before the next income, then the **emergency fund**, then **savings goals** (nearest deadline first), then **free** spending. Nothing is recommended for saving while a bill is short.
-- **Peace of mind** (Home): *calm* when needs are covered and money lasts until the next income; *watch* when needs are safe but spending is too fast; *act* when there isn't enough money for a bill (it names the bill, the amount short and cut-backs sized to the days left). A bill that is affordable but not yet set aside is a gentle "set aside" action, not an alarm.
+- **Peace of mind** (Home): *calm* when the next 30 days of bills are covered (it also says what is earmarked this month and how many months the safety net covers); *watch* when an essential bill in the next 30 days isn't covered yet, or spending has eaten into this month's earmark; *act* when there isn't enough cash for a bill (it names the bill, the amount short, and says to pause wants and cut back before payday). A bill that is affordable but not yet set aside is a gentle "set aside" action, not an alarm.
 - **Consequences before money leaves**: recording money out, or moving money into savings, that would come out of bill money shows which bill would go short and by how much. The user chooses "Don't spend it" or "Spend anyway"; Imali never blocks.
-- **Emergency fund** (Save): days of essentials it covers; if it can't grow this month, why (needs uncovered, no free money, or a 0% rule), what that means in rand, and cut-backs.
+- **Emergency fund** (Save): the target is automatic, months × monthly essentials rounded up to R100 (R1 000 until there is enough history). The card shows how it was worked out, months covered, a progress bar with a one-month marker, a months selector (6 recommended), and "This month: R{x} set aside, moves in on {date}". If it can't grow, why (bills come first, no free money, or a 0% rule), what that means in rand, and cut-backs. Taking money out offers "Move to a savings goal" or "Use for spending", with months covered before and after.
+- **Spending notices** (`spendingNotices`): at most one, in priority order: *earmark used* (spending has eaten into money set aside this month), *protect saving* (more than usual is earmarked), *month end soon*, then *over pace*. Each carries its evidence and one action (pause the largest want bill, or a daily limit). "Got it" hides that notice for the day; a more urgent one still shows.
 - **Essential or want**: each bill is tagged when it is added (a dropdown in "Add a bill"; older bills count as essential). Want bills (DStv, gym, streaming) are still set aside before daily spending, because the debit order still goes off until it is cancelled.
-- **Cut-backs** start with want bills, cancelled whole: the smallest one that covers the gap, otherwise the biggest and so on. Then everyday extras: takeaways, outings, fun, clothing and other, each capped (50/50/50/40/30%). Essential bills, groceries, transport, rent, school, health, family, stokvel, debt and airtime are never cut.
+- **Cut-backs** start with want bills, cancelled whole, largest first. Monthly room for saving already subtracts want bills. Then everyday extras: takeaways, outings, fun, clothing and other, each capped (50/50/50/40/30%). Essential bills, groceries, transport, rent, school, health, family, stokvel, debt and airtime are never cut.
 - **Only essentials raise alarms**: "you're short" and the spending warning are about essential bills; if only a want bill would go short, Imali suggests pausing it instead.
 
 ### Save ([js/views/savings.js](js/views/savings.js))
 - The buckets bar, and the **Needs** card: set money aside, ask for a release (3 days' notice), or cancel a pending release.
 - The "pay yourself first" savings percentage.
-- **Savings goals** with progress bars, and a one-tap **emergency fund** starter goal.
-- The "pay yourself first" rule and the savings percentage.
 - **Savings goals** with progress bars. Users can move money into a goal or take it back out.
-- A one-tap **emergency fund** starter goal.
+- The **emergency fund** card (see Money coach), or a one-tap starter if there is none yet.
 - **Goals with a deadline** ([js/core/goals.js](js/core/goals.js)): "R3 000 by 15 December" becomes an amount per payday (per week if income varies), a status (on track / a stretch / too big / not enough history yet) and, when needed, specific cuts to extras, a later date or a lower amount. "How we worked this out" shows every number used. Cuts never touch rent, bills, school, health, family, stokvel, debt or transport.
 
 ### Credit / loan checker ([js/views/credit.js](js/views/credit.js), logic in [js/core/credit.js](js/core/credit.js))
@@ -124,7 +133,7 @@ New South African scam types covered:
 
 ### Settings ([js/views/settings.js](js/views/settings.js))
 - **Display:** language, larger text, high contrast and dark mode ([js/prefs.js](js/prefs.js), saved in `localStorage`; no financial data is stored there).
-- **Profile** name, **how you're paid**, and **example data** (load or clear).
+- **Profile** name, **how you're paid**, **example data** (load or clear), and **Run setup again** (nothing is deleted).
 - **Install** button (uses the browser's install prompt where available).
 - **Change PIN.**
 - **Backup and restore:** an encrypted backup file protected by a **separate password of at least 10 characters**, since the file can leave the phone.
@@ -156,9 +165,11 @@ js/idb.js                                 small IndexedDB wrapper
 js/vault.js                               encrypted storage: create / unlock / lock / save / backup / restore
 js/core/                                  pure logic with no DOM, all unit-tested
   budget.js      safe-to-spend, income gap, bill due dates
-  buckets.js     Needs / Safety / Free, income split, release notice
+  buckets.js     Needs / Safety / Free, income split and earmarks, release notice
+  sweep.js       month-end sweep of earmarks into the safety net and goals
+  setup.js       guided setup steps and running bill totals
   goals.js       goals with a deadline: per-payday amount, capacity, cuts, alternatives
-  coach.js       the money coach: peace of mind, emergency fund verdict, consequences of spending
+  coach.js       the money coach: peace of mind, emergency fund verdict, spending notices, consequences
   credit.js      repayment, effective rate, loan risk assessment
   crypto.js      PBKDF2 + AES-GCM helpers
   security.js    PIN and backup-password rules
@@ -215,8 +226,9 @@ $env:PORT=3000; npm start            # PowerShell
 ```bash
 npm test
 ```
-There are 174 tests, and they currently all pass. The main suites:
+There are 213 tests, and they currently all pass. The main suites:
 - **[tests/core.test.mjs](tests/core.test.mjs):** money parsing and formatting, date arithmetic, budget logic (income gaps, late income, bills in short months, shortfall, income split), credit maths and risk flags, scam checker (true positives, "never share" notices not flagged, huge input), PIN rules.
+- **[tests/allocation.test.mjs](tests/allocation.test.mjs), [tests/sweep.test.mjs](tests/sweep.test.mjs), [tests/emergency.test.mjs](tests/emergency.test.mjs), [tests/notices.test.mjs](tests/notices.test.mjs), [tests/setup.test.mjs](tests/setup.test.mjs):** bills first over a 30-day horizon (including an R8 000 income with R6 000 of bills), month-end sweeps, the automatic emergency target, notice priority and dismissal, and setup migration, resume and step rules.
 - **[tests/crypto.test.mjs](tests/crypto.test.mjs):** encrypt/decrypt round trip, a new IV each time, a wrong PIN, tampered data or wrong context all fail, keys can't be exported, iteration bounds, record shape checks.
 - **[tests/project.test.mjs](tests/project.test.mjs):** every translation key exists in all three languages with matching placeholders, every app file is in the service-worker cache, no unsafe HTML or `eval` APIs are used, and the CSP is strict and identical in all three places.
 
@@ -264,7 +276,7 @@ This copies only the files the app needs into `dist/`. `dist/` is git-ignored.
 
 1. **Lock screen:** switch the language to isiZulu and back, then create a PIN. Try `123456` first to show it being rejected.
 2. **Money:** add an income of R1,500 from 10 days ago and one of R1,200 from today, then add a R400 bill due next week. Show "safe to spend today" and the estimated next payday.
-3. **Save:** start the emergency fund and move R100 into it. The safe amount on Home goes down. With example data loaded, the Holiday goal shows a per-week amount, that it's a stretch, and two small cuts; tap "Use this plan".
+3. **Save:** the emergency fund card shows its automatic target and months covered; change the months to 3 and the target drops. The safe amount on Home leaves out what is earmarked for month-end. With example data loaded, the Holiday goal shows a per-week amount, that it's a stretch, and two small cuts; tap "Use this plan".
 4. **Credit:** check R5,000 at 60% over 6 months, with a R600 initiation fee and a R69 monthly fee, against an income of R3,000/month. The repayment is about R1,172/month (39% of income) and the real yearly cost is about 239%. It is flagged **danger**, with the reasons explained.
 5. **Scams:** paste *"Congratulations! You've won R50 000. Pay a R250 release fee and send the OTP to claim: bit.ly/xyz"*. It is rated **high risk**, with each warning sign explained.
 6. **Security:** set "Lock when I leave the app for" to 30 sec in Settings, go to the home screen and back after 30 seconds, and the app is locked. Show that the content is blurred in the app switcher, and that DevTools → IndexedDB contains only ciphertext.

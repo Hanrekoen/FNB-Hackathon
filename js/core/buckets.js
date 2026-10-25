@@ -2,14 +2,18 @@
 // soft-guarded) and Free (what's left, which becomes safe-to-spend). Money never moves in a
 // bank here; these are amounts Imali keeps aside on the user's behalf.
 
-import { cashAvailable, needsBalance, safetyBalance, summarize } from './budget.js';
+import { cashAvailable, coverage, goalSaved, monthOf, needsBalance, safetyBalance, summarize } from './budget.js';
 import { addDays, toISO } from './dates.js';
 import { monthlyEquivalent } from './forecast.js';
-import { datedGoalContributions, savingsShare, savingsTarget } from './goals.js';
+import { monthlyEssentials, monthlyNeed } from './goals.js';
+
+export { EMERGENCY_STARTER } from './goals.js';
+import { cautiousMonthlyIncome } from './income.js';
 
 export const NOTICE_DAYS = 3;
 export const DAY_MS = 86_400_000;
-export const EMERGENCY_STARTER = 100_000; // R1 000
+// An accepted goal plan also earmarks its monthly amount from each income (decided by the team).
+export const EARMARK_GOAL_PLAN = true;
 
 const sum = (xs) => xs.reduce((a, b) => a + b, 0);
 const defaultId = () => crypto.randomUUID();
@@ -20,69 +24,79 @@ export const pendingTotal = (data) => sum(pendingReleases(data).map((r) => r.amo
 /** Needs money not already promised to a pending release. */
 export const needsAvailable = (data) => Math.max(0, needsBalance(data.transactions) - pendingTotal(data));
 
+/** Goals whose accepted plan earmarks money each month: unfinished, nearest deadline first. */
+function plannedGoals(data, today) {
+  return data.goals
+    .filter((g) => g.by && g.by > today && g.plan && goalSaved(data.transactions, g.id) < g.target)
+    .sort((x, y) => x.by.localeCompare(y.by));
+}
+
 /**
- * Split income that was just recorded: bills due before the next income first, then the
- * savings % (emergency fund first), then each dated goal's per-payday amount, nearest deadline
- * first. The rest is free. Never sets aside more than the free money actually on hand.
- * `incomeId` links the split to its income, so deleting the income can undo the split.
+ * Split income that was just recorded, in a fixed order: essential bills due in the next 30 days
+ * (or until the next income, if later) until fully covered, then want bills, then an earmark of
+ * the savings % for month-end, then each accepted goal plan's share. The rest is free money.
+ * Nothing moves to savings now: earmarks stay in cash until the month-end sweep. Never sets
+ * aside more than the cash on hand. `incomeId` links it all to the income for undoing.
  */
 export function allocate(data, amount, today, incomeId = null) {
   const s = summarize(data, today);
-  const room = Math.max(0, s.cash - s.needs);
-  const needs = Math.min(amount, room, Math.max(0, s.billsTotal - needsAvailable(data)));
-  const remaining = amount - needs;
-  let left = Math.min(remaining, room - needs);
-  const safety = Math.min(left, savingsShare(data, remaining));
-  left -= safety;
-  const goals = [];
-  for (const c of datedGoalContributions(data, today)) {
-    const give = Math.min(left, c.amount);
-    if (give <= 0) break;
-    goals.push({ ...c, amount: give });
-    left -= give;
+  const pending = s.needs - needsAvailable(data);
+  const { unfundedEssential, unfundedWant } = coverage(s.billsHorizon, Math.max(0, s.covered - pending));
+  let left = Math.min(amount, Math.max(0, s.cash - s.needs - s.earmarked));
+  const take = (want) => { const x = Math.max(0, Math.min(left, want)); left -= x; return x; };
+  const needsEssential = take(unfundedEssential);
+  const needsWant = take(unfundedWant);
+  const afterBills = amount - needsEssential - needsWant;
+  const earmarkEmergency = take(Math.floor((afterBills * data.settings.savePercent) / 100));
+  const earmarkGoals = [];
+  if (EARMARK_GOAL_PLAN) {
+    // A goal's monthly amount, shared across the month's incomes in proportion to their size.
+    const monthly = Math.max(amount, cautiousMonthlyIncome(data.transactions, today));
+    for (const g of plannedGoals(data, today)) {
+      const share = Math.ceil((monthlyNeed(data, g.plan.perContribution) * amount) / monthly);
+      const x = take(Math.min(share, g.target - goalSaved(data.transactions, g.id)));
+      if (x > 0) earmarkGoals.push({ goalId: g.id, name: g.name, amount: x });
+    }
   }
+  const needs = needsEssential + needsWant;
   return {
     amount,
     incomeId,
     needs,
-    safety,
-    goals,
-    free: remaining - safety - sum(goals.map((g) => g.amount)),
+    needsEssential,
+    needsWant,
+    earmarkEmergency,
+    earmarkGoals,
+    free: amount - needs - earmarkEmergency - earmarkGoals.reduce((x, g) => x + g.amount, 0),
     pct: data.settings.savePercent,
-    goalId: savingsTarget(data)?.id ?? null,
     nextIncome: s.next.date,
-    bills: s.billsDue,
+    horizon: s.horizon,
+    bills: s.billsHorizon,
   };
 }
 
-/**
- * Records an allocation. Creates an emergency fund if the savings % has nowhere to go yet.
- * Every move is linked to its income, so deleting the income undoes the whole split.
- */
-export function applyAllocation(data, { needs, safety, goalId, goals = [], incomeId = null }, today, emergencyName, newId = defaultId) {
+/** Records an allocation: bill money into Needs now, saving as earmarks for month-end. */
+export function applyAllocation(data, { needs, earmarkEmergency = 0, earmarkGoals = [], incomeId = null }, today, newId = defaultId) {
   const link = incomeId ? { fromIncome: incomeId } : {};
-  const save = (goal, amount) => data.transactions.push({ id: newId(), type: 'save', amount, goalId: goal, category: 'save', note: '', date: today, ...link });
   if (needs > 0) data.transactions.push({ id: newId(), type: 'needs', amount: needs, category: 'needs', note: '', date: today, ...link });
-  for (const g of goals) if (g.amount > 0 && data.goals.some((x) => x.id === g.goalId)) save(g.goalId, g.amount);
-  if (safety <= 0) return;
-  let id = goalId ?? savingsTarget(data)?.id ?? data.goals.find((g) => g.kind === 'emergency')?.id;
-  if (!id) {
-    id = newId();
-    data.goals.push({ id, name: emergencyName, target: EMERGENCY_STARTER, kind: 'emergency' });
-  }
-  save(id, safety);
+  const earmark = (kind, amount, goalId) => data.earmarks.push({
+    id: newId(), month: monthOf(today), kind, amount, incomeId, ...(goalId ? { goalId } : {}),
+  });
+  if (earmarkEmergency > 0) earmark('emergency', earmarkEmergency);
+  for (const g of earmarkGoals) if (g.amount > 0 && data.goals.some((x) => x.id === g.goalId)) earmark('goal', g.amount, g.goalId);
 }
 
 /**
- * Deletes a transaction. Deleting an income also removes the Needs and Safety moves made from
- * its split, and Needs is then trimmed so it never holds more than the cash really on hand
- * (older data has no link, and money can't stay set aside if it was never there).
+ * Deletes a transaction. Deleting an income also removes the Needs moves and month-end
+ * earmarks made from its split, and Needs is then trimmed so it never holds more than the cash
+ * really on hand (older data has no link, and money can't stay set aside if it was never there).
  * Returns the linked moves removed and the amount trimmed from Needs.
  */
 export function deleteTransaction(data, txId, today, newId = defaultId) {
-  const linked = data.transactions.filter((t) => t.fromIncome === txId);
+  const linked = [...data.transactions.filter((t) => t.fromIncome === txId), ...data.earmarks.filter((e) => e.incomeId === txId)];
   const gone = new Set([txId, ...linked.map((t) => t.id)]);
   data.transactions = data.transactions.filter((t) => !gone.has(t.id));
+  data.earmarks = data.earmarks.filter((e) => !gone.has(e.id));
   const excess = needsBalance(data.transactions) - Math.max(0, cashAvailable(data.transactions));
   if (excess > 0) {
     data.transactions.push({ id: newId(), type: 'release', amount: excess, category: 'release', note: '', date: today, correction: true });
@@ -174,10 +188,26 @@ export function safetyConsequence(data, amount, today) {
   const before = safetyBalance(data);
   const after = Math.max(0, before - amount);
   const perDay = dailyEssentials(data, today);
+  const { total } = monthlyEssentials(data, today);
+  const months = (x) => (total ? Math.floor((x * 10) / total) / 10 : null);
   return {
     before,
     after,
     daysBefore: perDay ? Math.floor(before / perDay) : null,
     daysAfter: perDay ? Math.floor(after / perDay) : null,
+    monthsBefore: months(before),
+    monthsAfter: months(after),
   };
+}
+
+/**
+ * Moves money from one goal to another (e.g. from the emergency fund to a savings goal). Both
+ * steps are recorded, so history shows where it went and the money on hand doesn't change.
+ */
+export function moveToGoal(data, fromId, toId, amount, today, newId = defaultId) {
+  const to = data.goals.find((g) => g.id === toId);
+  data.transactions.push(
+    { id: newId(), type: 'withdraw', amount, goalId: fromId, category: 'withdraw', note: to?.name ?? '', date: today },
+    { id: newId(), type: 'save', amount, goalId: toId, category: 'save', note: '', date: today },
+  );
 }

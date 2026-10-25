@@ -6,6 +6,7 @@ import { AUTO_LOCK_OPTIONS, BG_GRACE_OPTIONS } from '../prefs.js';
 import * as vault from '../vault.js';
 import { clearExample, loadExample } from './example.js';
 import { secretFields } from './gate.js';
+import { restartSetup } from '../core/setup.js';
 import { profileSummary } from './profile.js';
 import {
   bulletList, busy, card, checkRow, field, formError, pageTitle, select, showError,
@@ -21,6 +22,9 @@ export function render(ctx) {
       h('p', { text: profileSummary(ctx.data.income) }),
       h('a', { class: 'btn secondary', href: '#/profile' }, t('income.change'))),
     exampleCard(ctx),
+    card(t('setup.rerun'),
+      h('p', { text: t('setup.rerunBody') }),
+      h('button', { class: 'btn secondary', type: 'button', on: { click: () => ctx.commit((d) => restartSetup(d), null, 'main h1') } }, t('setup.rerun'))),
     installCard(ctx),
     pinCard(ctx),
     backupCard(ctx),

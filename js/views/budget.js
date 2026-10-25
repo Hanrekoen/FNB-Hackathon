@@ -1,12 +1,13 @@
 // "Money" tab: record money in/out, expected income date, bills, monthly overview, history.
 
-import { billNextDue, cashAvailable, monthTotals, spendingByCategory, summarize } from '../core/budget.js';
+import { billNextDue, cashAvailable, monthOf, monthTotals, spendingByCategory, summarize } from '../core/budget.js';
 import { NOTICE_DAYS, allocate, applyAllocation, payBill } from '../core/buckets.js';
 import { IN_CATS, OUT_CATS } from '../core/categories.js';
 import { daysBetween, isISODate, todayISO } from '../core/dates.js';
 import { variableEstimate } from '../core/forecast.js';
 import { centsToInput, parseAmount, parseOptionalAmount } from '../core/money.js';
 import { paymentNeedsCheck } from '../core/scam-advice.js';
+import { lastDayOf } from '../core/sweep.js';
 import { h } from '../dom.js';
 import { t } from '../i18n.js';
 import { icon } from '../icons.js';
@@ -93,7 +94,7 @@ function addForm(ctx, initialType) {
 /** What the plan would leave per day, worked out on a copy so nothing is saved until Apply. */
 function perDayAfter(data, alloc, today) {
   const copy = structuredClone(data);
-  applyAllocation(copy, alloc, today, '', () => 'preview');
+  applyAllocation(copy, alloc, today, () => 'preview');
   return summarize(copy, today);
 }
 
@@ -104,13 +105,13 @@ function allocationCard(ctx, alloc, today) {
     h('span', {}, h('span', { class: `swatch seg-${cls}`, 'aria-hidden': 'true' }), label),
     h('strong', { text: money(amount) }));
   const apply = (plan) => ctx.commit(
-    (d) => applyAllocation(d, plan, today, t('save.emergencyName'), newId),
+    (d) => applyAllocation(d, plan, today, newId),
     t('alloc.applied', { amount: money(plan.needs) }),
   );
 
   const needsIn = amountInput({ id: 'alloc-needs', value: centsToInput(alloc.needs) });
-  const safetyIn = amountInput({ id: 'alloc-safety', value: centsToInput(alloc.safety) });
-  const goalIns = alloc.goals.map((g) => [g, amountInput({ value: centsToInput(g.amount) })]);
+  const safetyIn = amountInput({ id: 'alloc-safety', value: centsToInput(alloc.earmarkEmergency) });
+  const goalIns = alloc.earmarkGoals.map((g) => [g, amountInput({ value: centsToInput(g.amount) })]);
   const err = formError();
   function onAdjust(e) {
     e.preventDefault();
@@ -118,22 +119,24 @@ function allocationCard(ctx, alloc, today) {
       ...goalIns.map(([, input]) => [input, parseOptionalAmount(input.value)])];
     const bad = parsed.find(([, v]) => v === null);
     if (bad) return showError(err, t('err.amount'), bad[0]);
-    const [needs, safety, ...goalAmounts] = parsed.map(([, v]) => v);
-    if (needs + safety + goalAmounts.reduce((a, b) => a + b, 0) > alloc.amount) {
+    const [needs, earmarkEmergency, ...goalAmounts] = parsed.map(([, v]) => v);
+    if (needs + earmarkEmergency + goalAmounts.reduce((a, b) => a + b, 0) > alloc.amount) {
       return showError(err, t('err.allocTooMuch', { amount: money(alloc.amount) }), safetyIn);
     }
-    apply({ ...alloc, needs, safety, goals: goalIns.map(([g], i) => ({ ...g, amount: goalAmounts[i] })) });
+    apply({ ...alloc, needs, earmarkEmergency, earmarkGoals: goalIns.map(([g], i) => ({ ...g, amount: goalAmounts[i] })) });
   }
 
   return h('section', { class: 'card highlight', id: 'alloc', tabindex: -1, 'aria-labelledby': 'alloc-h' },
     h('h2', { id: 'alloc-h', text: t('split.title') }),
     h('p', { text: t('alloc.lead', { amount: money(alloc.amount) }) }),
     h('ul', { class: 'plain' },
-      row(t('split.bills'), alloc.needs, 'needs'),
+      row(t('alloc.essential'), alloc.needsEssential, 'needs'),
+      alloc.needsWant > 0 && row(t('alloc.wants'), alloc.needsWant, 'needs'),
       alloc.needs > 0 && billNames && h('li', { class: 'hint', text: t('alloc.billsFor', { bills: billNames }) }),
-      row(t('split.save', { pct: alloc.pct }), alloc.safety, 'safety'),
-      alloc.goals.map((g) => row(t('alloc.goal', { goal: g.name }), g.amount, 'safety')),
+      row(t('alloc.earmark', { pct: alloc.pct }), alloc.earmarkEmergency, 'safety'),
+      alloc.earmarkGoals.map((g) => row(t('alloc.goal', { goal: g.name }), g.amount, 'safety')),
       row(t('split.spend'), alloc.free, 'free')),
+    h('p', { class: 'hint', text: t('alloc.monthEnd', { date: fmtDate(lastDayOf(monthOf(today))) }) }),
     h('p', { class: 'big-fact', text: t('alloc.perDay', { amount: money(after.perDay), n: after.daysLeft }) }),
     h('div', { class: 'row' },
       h('button', { class: 'btn', type: 'button', on: { click: () => apply(alloc) } }, t('alloc.apply'))),
@@ -194,7 +197,8 @@ function billsCard(ctx, today) {
       billForm(ctx, today)));
 }
 
-function billForm(ctx, today) {
+/** Add a bill: name, amount, how often, when due, fixed or varying, essential or want. */
+export function billForm(ctx, today) {
   const name = h('input', { type: 'text', id: 'bill-name', maxlength: 40, autocomplete: 'off' });
   const amount = amountInput({ id: 'bill-amount' });
   const freq = select(FREQUENCIES.map((f) => [f, t(`bills.freq.${f}`)]), 'monthly', { id: 'bill-freq' });

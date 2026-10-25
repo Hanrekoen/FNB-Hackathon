@@ -1,11 +1,11 @@
 import { cashAvailable, goalSaved, needsBalance, summarize } from '../core/budget.js';
 import {
-  DAY_MS, EMERGENCY_STARTER, NOTICE_DAYS, cancelRelease, checkRelease, needsAvailable, pendingReleases, releaseWarning, requestRelease,
+  DAY_MS, EMERGENCY_STARTER, NOTICE_DAYS, cancelRelease, checkRelease, moveToGoal, needsAvailable, pendingReleases, releaseWarning, requestRelease,
   safetyConsequence, setAside,
 } from '../core/buckets.js';
 import { addDays, isISODate, todayISO } from '../core/dates.js';
 import { assessMoney } from '../core/coach.js';
-import { goalPlan } from '../core/goals.js';
+import { goalPlan, goalTarget } from '../core/goals.js';
 import { parseAmount } from '../core/money.js';
 import { SAVE_PERCENTS } from '../core/schema.js';
 import { h } from '../dom.js';
@@ -20,7 +20,8 @@ export function render(ctx) {
   const today = todayISO();
   const s = summarize(d, today);
   const cash = cashAvailable(d.transactions);
-  const goals = d.goals.map((g) => ({ ...g, saved: goalSaved(d.transactions, g.id) }));
+  // The emergency fund's target is worked out live from essentials, not stored.
+  const goals = d.goals.map((g) => ({ ...g, target: goalTarget(d, g, today), saved: goalSaved(d.transactions, g.id) }));
   const coach = assessMoney(d, today);
 
   return h('div', { class: 'stack' },
@@ -95,6 +96,31 @@ function ruleCard(ctx) {
   return card(t('save.ruleTitle'), h('p', { text: t('save.ruleBody') }), field(t('save.ruleLabel'), sel));
 }
 
+/**
+ * Taking money out of the emergency fund: allowed, but only after seeing how many months of
+ * essentials it leaves, with the choice to move it into a savings goal instead of spending it.
+ * Resolves to 'spend', a goal id, or '' to keep it.
+ */
+async function chooseEmergencyWithdraw(ctx, g, amount, today) {
+  const c = safetyConsequence(ctx.data, amount, today);
+  const lines = [
+    c.monthsBefore !== null
+      ? t('safety.monthsMove', { before: c.monthsBefore, after: c.monthsAfter })
+      : t('safety.consequence', { before: money(c.before), after: money(c.after) }),
+    t('safety.sure'),
+  ];
+  const others = ctx.data.goals.filter((x) => x.id !== g.id);
+  const choice = await ctx.choose(lines.join('\n\n'), [
+    { value: 'keep', label: t('safety.keep') },
+    others.length > 0 && { value: 'goal', label: t('safety.toGoal'), secondary: true },
+    { value: 'spend', label: t('safety.useSpend'), secondary: true },
+  ].filter(Boolean));
+  if (choice !== 'goal') return choice === 'spend' ? 'spend' : '';
+  if (others.length === 1) return others[0].id;
+  const pick = await ctx.choose(t('safety.whichGoal'), others.map((x) => ({ value: x.id, label: x.name, secondary: true })));
+  return pick || '';
+}
+
 /** Taking money out of Safety is allowed instantly, but only after seeing what it means. */
 async function confirmWithdraw(ctx, amount, today) {
   const c = safetyConsequence(ctx.data, amount, today);
@@ -115,7 +141,14 @@ function goalCard(ctx, g, cash, today, coach) {
     if (!cents) return showError(err, t('err.amount'), amount);
     if (kind === 'save' && cents > cash) return showError(err, t('err.notEnoughCash', { amount: money(Math.max(0, cash)) }), amount);
     if (kind === 'withdraw' && cents > g.saved) return showError(err, t('err.notEnoughSaved', { amount: money(g.saved) }), amount);
-    if (kind === 'withdraw' && !(await confirmWithdraw(ctx, cents, today))) return;
+    if (kind === 'withdraw' && g.kind === 'emergency') {
+      const to = await chooseEmergencyWithdraw(ctx, g, cents, today);
+      if (!to) return;
+      if (to !== 'spend') {
+        const goalName = ctx.data.goals.find((x) => x.id === to)?.name ?? '';
+        return ctx.commit((d) => moveToGoal(d, g.id, to, cents, today, newId), t('safety.moved', { amount: money(cents), goal: goalName }));
+      }
+    } else if (kind === 'withdraw' && !(await confirmWithdraw(ctx, cents, today))) return;
     if (kind === 'save' && !(await confirmConsequence(ctx, cents, 'save'))) return;
     await ctx.commit((d) => {
       d.transactions.push({ id: newId(), type: kind, amount: cents, goalId: g.id, category: kind, note: '', date: today });
@@ -139,6 +172,7 @@ function goalCard(ctx, g, cash, today, coach) {
     h('progress', { max: g.target, value: Math.min(g.saved, g.target), 'aria-label': t('save.progress', { pct }) }),
     h('p', { text: t('save.ofTarget', { saved: money(g.saved), target: money(g.target), pct }) }),
     g.saved >= g.target && h('p', { class: 'alert ok with-icon' }, icon('party'), t('save.reached')),
+    g.kind === 'emergency' && emergencyHeader(ctx, coach.emergency),
     g.kind === 'emergency' && emergencySection(coach.emergency),
     planSection(ctx, g, today, coach.peace.status === 'act'),
     dateEditor(ctx, g, today),
@@ -286,12 +320,38 @@ function impactLine(e) {
   return h('p', { class: 'hint', text });
 }
 
-const EMERGENCY_REASON = { noFreeMoney: 'coach.em.noFreeMoney', needsUncovered: 'coach.em.needsUncovered', noSavingsRule: 'coach.em.noSavingsRule' };
+const EMERGENCY_REASON = { noFreeMoney: 'coach.em.noFreeMoney', needsFirst: 'coach.em.needsFirst', noSavingsRule: 'coach.em.noSavingsRule' };
+
+/**
+ * How the automatic target is worked out, months covered on a bar with a 1-month marker, the
+ * months choice, and this month's earmark waiting for month-end.
+ */
+function emergencyHeader(ctx, e) {
+  const bar = h('div', { class: 'em-progress' },
+    h('progress', { max: e.target, value: Math.min(e.saved, e.target), 'aria-label': t('em.monthsCovered', { n: e.monthsCovered ?? 0 }) }));
+  if (e.months > 1) {
+    const marker = h('span', { class: 'em-marker', 'aria-hidden': 'true', text: t('em.oneMonth') });
+    // CSSOM writes are allowed by the CSP; style attributes are not.
+    marker.style.left = `${100 / e.months}%`;
+    bar.append(marker);
+  }
+  const months = select(Array.from({ length: 12 }, (_, i) => i + 1).map((n) => [n, t(n === 6 ? 'em.monthsRecommended' : n === 1 ? 'em.monthOne' : 'em.monthsOption', { n })]), e.months, {
+    on: { change: () => ctx.commit((d) => { d.settings.emergencyMonths = Number(months.value); }, t('em.monthsSaved', { n: months.value })) },
+  });
+  return h('div', { class: 'em-header' },
+    h('p', { class: 'big-fact', text: t('em.targetHow', { months: e.months, essentials: money(e.essentials.total), target: money(e.target) }) }),
+    e.monthsCovered !== null && h('p', { text: t('em.monthsCovered', { n: e.monthsCovered }) }),
+    bar,
+    field(t('em.monthsLabel'), months),
+    e.earmarkedThisMonth > 0 && h('p', { class: 'hint', text: t('em.thisMonth', { amount: money(e.earmarkedThisMonth), date: fmtDate(e.monthEnd) }) }),
+    h('details', {},
+      h('summary', { text: t('forecast.how') }),
+      h('p', { text: t('em.numbers', { bills: money(e.essentials.bills), spending: money(e.essentials.spending), days: e.essentials.days }) })));
+}
 
 /** The emergency fund's verdict: how long it lasts, and if it can't grow this month, why and what would help. */
 function emergencySection(e) {
   return h('div', { class: 'goal-plan' },
-    e.days !== null && h('p', { class: 'big-fact', text: t('coach.em.days', { n: e.days }) }),
     e.canSave === true && !e.reached && h('p', { class: 'goal-status ok' }, icon('check'), t('coach.em.canSave', { amount: money(e.monthly) })),
     e.canSave === false && [
       h('p', { class: 'goal-status warn' }, icon('alert'), t(EMERGENCY_REASON[e.reason])),
@@ -315,6 +375,14 @@ function starterCard(ctx, s, emergency) {
 }
 
 function newGoalCard(ctx) {
+  return h('section', { class: 'card' },
+    h('details', { open: !ctx.data.goals.some((g) => g.kind !== 'emergency') },
+      h('summary', { text: t('save.newTitle') }),
+      goalForm(ctx)));
+}
+
+/** Name, amount and an optional date; `after` runs once the goal is saved (e.g. in setup). */
+export function goalForm(ctx, { after = null } = {}) {
   const name = h('input', { type: 'text', id: 'goal-name', maxlength: 40, autocomplete: 'off' });
   const target = amountInput({ id: 'goal-target' });
   const today = todayISO();
@@ -331,15 +399,13 @@ function newGoalCard(ctx) {
     const goal = { id: newId(), name: n.slice(0, 40), target: cents, kind: 'goal' };
     if (by.value) goal.by = by.value;
     await ctx.commit((d) => { d.goals.push(goal); }, t('save.created'));
+    if (after) after();
   }
 
-  return h('section', { class: 'card' },
-    h('details', { open: !ctx.data.goals.some((g) => g.kind !== 'emergency') },
-      h('summary', { text: t('save.newTitle') }),
-      h('form', { novalidate: true, on: { submit: onSubmit } },
-        field(t('save.goalName'), name, t('save.goalNameHint')),
-        field(t('save.goalTarget'), target),
-        field(t('save.byWhen'), by, t('save.byWhenHint')),
-        err,
-        h('button', { class: 'btn', type: 'submit' }, t('save.create')))));
+  return h('form', { novalidate: true, on: { submit: onSubmit } },
+    field(t('save.goalName'), name, t('save.goalNameHint')),
+    field(t('save.goalTarget'), target),
+    field(t('save.byWhen'), by, t('save.byWhenHint')),
+    err,
+    h('button', { class: 'btn', type: 'submit' }, t('save.create')));
 }

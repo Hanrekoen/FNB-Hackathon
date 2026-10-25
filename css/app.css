@@ -538,3 +538,20 @@ html.privacy #app { filter: blur(18px); }
 .tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; border: 1px solid; vertical-align: 0.1em; }
 .tag.essential { color: var(--brand); border-color: var(--brand); }
 .tag.want { color: var(--warn); border-color: var(--warn); }
+
+/* Emergency fund: a "1 month" marker on the progress bar (left is set from the chosen months). */
+.em-progress { position: relative; padding-bottom: 1.4em; }
+.em-marker { position: absolute; top: 14px; transform: translateX(-50%); border-left: 2px solid var(--text); padding-left: 4px; font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+
+/* Spending notices: the icon and sentence carry the meaning; the border colour supports it. */
+.card.notice { border-left: 6px solid var(--line); }
+.card.notice.info { border-left-color: var(--brand); }
+.card.notice.warn { border-left-color: var(--warn); }
+.card.notice.danger { border-left-color: var(--danger); }
+.card.notice.compact { margin-bottom: 12px; }
+.card.notice .with-icon { align-items: flex-start; }
+
+/* Guided setup: no tab bar until it's finished. */
+.setup-mode .tabbar { display: none; }
+.setup-mode main { padding-bottom: calc(32px + env(safe-area-inset-bottom)); }
+.setup-nav { margin-top: 8px; }

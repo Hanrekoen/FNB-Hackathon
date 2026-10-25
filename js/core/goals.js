@@ -13,6 +13,11 @@ export const MIN_HISTORY_DAYS = 21;
 export const CUT_WINDOW_DAYS = 30;
 const MAX_CONTRIBUTIONS = 520; // ten years of weekly paydays
 
+export const EMERGENCY_STARTER = 100_000; // R1 000, until there are bills or spending to go on
+export const DEFAULT_EMERGENCY_MONTHS = 6;
+// Everyday essentials that aren't bills: counted in the safety-net target and the living buffer.
+export const ESSENTIAL_SPENDING = ['food', 'transport', 'airtime', 'health'];
+
 export const PER_MONTH = { monthly: 1, biweekly: 26 / 12, weekly: 52 / 12, varies: 52 / 12 };
 
 const sum = (xs) => xs.reduce((a, b) => a + b, 0);
@@ -67,18 +72,46 @@ export function hasEnoughHistory(data, today) {
   return incomeDates(data.transactions).length >= MIN_INCOMES && !!first && daysBetween(first, today) >= MIN_HISTORY_DAYS;
 }
 
+/**
+ * What essentials cost in a month: essential bills (not wants, not once-off) plus everyday
+ * essential spending (groceries, transport, airtime, health) averaged over the last 90 days, or
+ * over the days there are if fewer. The parts are returned for "How we worked this out".
+ */
+export function monthlyEssentials(data, today) {
+  const bills = sum(data.bills.filter((b) => b.kind !== 'want' && b.frequency !== 'once').map((b) => monthlyEquivalent(b, data.transactions, today)));
+  const first = data.transactions.map((t) => t.date).sort()[0];
+  const days = first ? Math.min(90, Math.max(1, daysBetween(first, today) + 1)) : 0;
+  const from = addDays(today, -days);
+  const spent = sum(data.transactions
+    .filter((t) => t.type === 'out' && !t.billId && ESSENTIAL_SPENDING.includes(t.category) && t.date > from && t.date <= today)
+    .map((t) => t.amount));
+  const spending = days ? Math.round((spent * 30) / days) : 0;
+  return { bills, spending, total: bills + spending, days };
+}
+
+/**
+ * The target a goal is working towards. The emergency fund's is automatic: the chosen number of
+ * months of essentials, rounded up to R100, so it grows with the user's real costs.
+ */
+export function goalTarget(data, goal, today) {
+  if (goal.kind !== 'emergency') return goal.target;
+  const { total } = monthlyEssentials(data, today);
+  const months = data.settings.emergencyMonths ?? DEFAULT_EMERGENCY_MONTHS;
+  return total > 0 ? Math.ceil((total * months) / 10_000) * 10_000 : EMERGENCY_STARTER;
+}
+
 /** Undated, unfinished goals get the savings % from each income, the emergency fund first. */
-export function savingsTarget(data) {
-  const open = data.goals.filter((g) => !g.by && goalSaved(data.transactions, g.id) < g.target);
+export function savingsTarget(data, today) {
+  const open = data.goals.filter((g) => !g.by && goalSaved(data.transactions, g.id) < goalTarget(data, g, today));
   return open.find((g) => g.kind === 'emergency') ?? open[0] ?? null;
 }
 
 /** Without any emergency fund, the savings % starts one; once every undated goal is full it stops. */
-export function savingsShare(data, amount) {
-  const target = savingsTarget(data);
+export function savingsShare(data, amount, today) {
+  const target = savingsTarget(data, today);
   if (!target && data.goals.some((g) => g.kind === 'emergency')) return 0;
   const share = Math.floor((amount * data.settings.savePercent) / 100);
-  return target ? Math.min(share, target.target - goalSaved(data.transactions, target.id)) : share;
+  return target ? Math.min(share, goalTarget(data, target, today) - goalSaved(data.transactions, target.id)) : share;
 }
 
 /** Monthly amount a dated goal still asks for, or 0 once it's reached or its date has passed. */
@@ -102,13 +135,15 @@ function goalsAhead(data, goal) {
  */
 export function monthlyCapacity(data, today, goal = null) {
   const income = cautiousMonthlyIncome(data.transactions, today);
-  const essentials = sum(data.bills.map((b) => monthlyEquivalent(b, data.transactions, today)));
+  const monthly = (b) => monthlyEquivalent(b, data.transactions, today);
+  const essentials = sum(data.bills.filter((b) => b.kind !== 'want').map(monthly));
+  const wants = sum(data.bills.filter((b) => b.kind === 'want').map(monthly));
   const spending = spendingPace(data.transactions, today).perDay * 30;
   // Same rule as the income split, so the same money is never promised twice.
-  const emergency = savingsShare(data, income);
+  const emergency = savingsShare(data, income, today);
   const others = goal ? goalsAhead(data, goal) : data.goals;
   const otherGoals = sum(others.map((g) => goalMonthlyNeed(data, g, today)));
-  return { income, essentials, spending, emergency, otherGoals, available: income - essentials - spending - emergency - otherGoals };
+  return { income, essentials, wants, spending, emergency, otherGoals, available: income - essentials - wants - spending - emergency - otherGoals };
 }
 
 function recentSpending(data, today) {
@@ -150,19 +185,16 @@ export const maxCuts = (data, today, scale = 1) =>
   sum(cuttableSpending(data, today, scale).map((c) => c.max)) + sum(wantBills(data, today, scale).map((w) => w.current));
 
 /**
- * Cut-backs that close a gap. Want bills come first and whole (a subscription is cancelled, not
- * trimmed): the smallest one that covers the gap on its own, otherwise the biggest, and so on.
+ * Cut-backs that close a gap. Want bills come first and whole (a subscription is paused or
+ * cancelled, not trimmed), largest first, showing the monthly saving.
  * Then everyday extras, biggest first, each rounded up to R10 but never past its cap, stopping
  * once the gap is covered. `current` and `after` are over the same period as the gap.
  */
 export function suggestCuts(data, today, gap, scale = 1) {
   const cuts = [];
   let left = gap;
-  const wants = wantBills(data, today, scale).sort((a, b) => a.current - b.current);
-  while (left > 0 && wants.length) {
-    const fits = wants.find((w) => w.current >= left);
-    const w = fits ?? wants[wants.length - 1];
-    wants.splice(wants.indexOf(w), 1);
+  for (const w of wantBills(data, today, scale).sort((a, b) => b.current - a.current)) {
+    if (left <= 0) break;
     cuts.push({ billId: w.billId, name: w.name, current: w.current, cut: w.current, after: 0 });
     left -= w.current;
   }
@@ -225,14 +257,4 @@ export function goalPlan(data, goal, today) {
   const limitedBy = need <= capacity.available + capacity.spending ? 'spending' : 'income';
   if (gap <= possible) return { ...plan, status: 'stretch', reason: 'notEnoughSpendable', gap, cuts, limitedBy };
   return { ...plan, status: 'unrealistic', reason: 'notEnoughTime', gap, cuts, limitedBy, alternatives: alternatives(data, goal, today, capacity) };
-}
-
-/** Per-payday amount for each unfinished dated goal, nearest deadline first, for splitting today's income. */
-export function datedGoalContributions(data, today) {
-  return data.goals
-    .filter((g) => g.by && g.by > today)
-    .map((g) => ({ goal: g, remaining: g.target - goalSaved(data.transactions, g.id) }))
-    .filter((x) => x.remaining > 0)
-    .sort((a, b) => a.goal.by.localeCompare(b.goal.by))
-    .map(({ goal, remaining }) => ({ goalId: goal.id, name: goal.name, amount: perContribution(remaining, contributionsLeft(data, today, goal.by, true)) }));
 }

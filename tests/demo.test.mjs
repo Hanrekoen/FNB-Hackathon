@@ -1,14 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { summarize } from '../js/core/budget.js';
+import { monthOf, summarize } from '../js/core/budget.js';
 import { pendingReleases } from '../js/core/buckets.js';
-import { assessMoney } from '../js/core/coach.js';
+import { assessMoney, spendingNotices } from '../js/core/coach.js';
 import { generateDemo } from '../js/core/demo.js';
 import { goalPlan } from '../js/core/goals.js';
 import { normalize } from '../js/core/schema.js';
 
-const names = { rent: 'Rent', data: 'Data', taxi: 'Taxi', registration: 'Fee', emergency: 'Emergency fund', releaseReason: 'Airtime', holiday: 'Holiday', streaming: 'Showmax' };
-const coachCut = (d, today) => assessMoney(d, today).emergency.plan.cuts;
+const names = { rent: 'Rent', data: 'Data', taxi: 'Taxi', registration: 'Fee', emergency: 'Emergency fund', releaseReason: 'Airtime', holiday: 'Holiday', streaming: 'Showmax', savings: 'Holiday job savings' };
 const make = (today) => generateDemo({ today, now: new Date(`${today}T12:00`).getTime(), names, profileName: 'Lerato' });
 
 // A spread of days: month ends, a leap day, year end, and every weekday
@@ -45,15 +44,16 @@ for (const today of DAYS) {
     assert.equal(plan.cuts[0].name, 'Showmax');
     assert.equal(plan.cuts[0].cut, 9_900);
     assert.ok(plan.cuts.slice(1).every((c) => ['takeaway', 'outings', 'clothing', 'fun', 'other'].includes(c.category)), 'only extras after the want');
-    assert.equal(coachCut(d, today)[0].name, 'Showmax', 'the emergency fund advice also starts with the want');
 
-    // A moment worth showing: the emergency fund can't grow this month, with the reason and impact.
+    // The whole cycle for judges: a sweep done, saving set aside this month, a safety net of
+    // about 1.5 months, and a spending notice.
     const coach = assessMoney(d, today);
     assert.ok(d.bills.some((b) => b.kind === 'want') && d.bills.some((b) => b.kind === 'essential'));
-    assert.equal(coach.emergency.canSave, false);
-    assert.equal(coach.emergency.reason, 'noFreeMoney');
-    assert.ok(coach.emergency.impact.bill && coach.emergency.plan.cuts.length > 0);
-    assert.notEqual(coach.peace.status, 'act', 'the example never starts with a bill short');
+    assert.equal(coach.peace.status, 'calm', 'bills covered for the next 30 days');
+    assert.ok(d.sweeps.length >= 1, 'at least one month-end sweep');
+    assert.ok(d.earmarks.some((e) => e.month === monthOf(today) && e.amount > 0), 'an earmark this month');
+    assert.ok(coach.emergency.monthsCovered >= 1.4 && coach.emergency.monthsCovered <= 1.7, `${coach.emergency.monthsCovered} months`);
+    assert.ok(['monthEndSoon', 'protectSaving'].includes(spendingNotices(d, today)?.id), 'a spending notice');
     assert.ok(plan.saved > 0 && plan.saved <= 40_000, `saved ${plan.saved}`);
   });
 }

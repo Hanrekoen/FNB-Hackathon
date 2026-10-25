@@ -7,6 +7,9 @@ import { hasPayday, incomeDates, incomeGaps, median, nextPayday, percentile } fr
 
 export const DEFAULT_GAP_DAYS = 14; // no income history yet
 export const OVERDUE_PLAN_DAYS = 7; // income is late: plan conservatively for another week
+// Bills are covered this far ahead. Planning only to the next income missed bills due later in
+// the month when income comes weekly or irregularly, so new money went to saving instead.
+export const NEEDS_HORIZON_DAYS = 30;
 
 const sum = (xs) => xs.reduce((a, b) => a + b, 0);
 
@@ -96,6 +99,41 @@ export function billOccurrences(bill, today, until) {
   return out;
 }
 
+/** How far ahead bills are covered: 30 days, or until the next income if that is later. */
+export function needsHorizon(data, today) {
+  const next = nextIncome(data, today).date;
+  const horizon = addDays(today, NEEDS_HORIZON_DAYS);
+  return next > horizon ? next : horizon;
+}
+
+export const monthOf = (iso) => iso.slice(0, 7);
+
+/** Money earmarked for month-end saving in one month (still in cash until the sweep moves it). */
+export function earmarkedTotal(data, month) {
+  return sum((data.earmarks ?? []).filter((e) => e.month === month).map((e) => e.amount));
+}
+
+/** Earmarks not yet moved by a month-end sweep: all excluded from free money. */
+export function unsweptEarmarks(data) {
+  const swept = new Set((data.sweeps ?? []).map((w) => w.month));
+  return (data.earmarks ?? []).filter((e) => !swept.has(e.month));
+}
+
+/**
+ * How much of the coming bills Needs doesn't cover yet. Needs pays essential bills first
+ * (earliest due first), then want bills, so a debit order for the gym never takes rent money.
+ */
+export function coverage(bills, needs) {
+  const essential = sum(bills.filter((b) => b.kind !== 'want').map((b) => b.planned));
+  const want = sum(bills.filter((b) => b.kind === 'want').map((b) => b.planned));
+  return {
+    essential,
+    want,
+    unfundedEssential: Math.max(0, essential - needs),
+    unfundedWant: Math.max(0, want - Math.max(0, needs - essential)),
+  };
+}
+
 /** Bills due before a date, one entry per occurrence, with the amount to plan for. */
 export function billsDueBy(data, today, until) {
   return data.bills
@@ -119,14 +157,28 @@ export function summarize(data, today) {
   const billsTotal = sum(billsDue.map((b) => b.planned));
   // Bills Needs can't cover still have to come out of free money.
   const unfunded = Math.max(0, billsTotal - needs);
-  const free = cash - needs;
+  const horizon = needsHorizon(data, today);
+  const billsHorizon = billsDueBy(data, today, horizon);
+  // Money set aside can't cover more than the cash that is really there.
+  const covered = Math.min(needs, Math.max(0, cash));
+  const { unfundedEssential, unfundedWant } = coverage(billsHorizon, covered);
+  // Savings already left cash, so only Needs and month-end earmarks are taken off here.
+  const earmarked = sum(unsweptEarmarks(data).map((e) => e.amount));
+  const free = cash - needs - earmarked;
   const perDay = Math.max(0, Math.floor((free - unfunded + spentToday) / daysLeft));
   return {
     cash,
     needs,
     safety,
+    earmarked,
     free,
     unfunded,
+    covered,
+    horizon,
+    billsHorizon,
+    horizonTotal: sum(billsHorizon.map((b) => b.planned)),
+    unfundedEssential,
+    unfundedWant,
     spentToday,
     perDay,
     leftToday: perDay - spentToday,

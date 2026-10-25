@@ -2,23 +2,26 @@
 // It is replayed through the real engine (allocations, bill payments, spending), so every
 // balance is consistent, and it is always relative to today so it never looks stale.
 
-import { billNextDue, goalSaved, summarize } from './budget.js';
-import { DAY_MS, allocate, applyAllocation, checkRelease, payBill, requestRelease, setAside } from './buckets.js';
-import { addDays, parseISO } from './dates.js';
-import { PER_MONTH, contributionsLeft, monthlyCapacity, suggestCuts } from './goals.js';
+import { billNextDue, goalSaved, monthOf, summarize } from './budget.js';
+import { DAY_MS, EMERGENCY_STARTER, allocate, applyAllocation, checkRelease, payBill, requestRelease, setAside } from './buckets.js';
+import { spendingNotices } from './coach.js';
+import { addDays, daysBetween, parseISO } from './dates.js';
+import { spendingPace } from './forecast.js';
+import { PER_MONTH, contributionsLeft, goalTarget, monthlyCapacity, monthlyEssentials, suggestCuts } from './goals.js';
 import { emptyData } from './schema.js';
+import { applySweeps, lastDayOf } from './sweep.js';
 
 export const DEMO_DAYS = 42;
 const HOLIDAY_WEEKS = 10;
 const HOLIDAY_SAVED = 40_000;
 
 const INCOMES = [
-  [-41, 240_000, 'allowance'],
-  [-33, 45_000, 'gig'],
-  [-27, 30_000, 'familyIn'],
-  [-18, 45_000, 'gig'],
-  [-13, 240_000, 'allowance'],
-  [-4, 50_000, 'gig'],
+  [-41, 260_000, 'allowance'],
+  [-33, 60_000, 'gig'],
+  [-27, 60_000, 'familyIn'],
+  [-18, 60_000, 'gig'],
+  [-13, 260_000, 'allowance'],
+  [-4, 60_000, 'gig'],
 ];
 
 // [category, min rand, max rand, notes]. Friday takeaways and Saturday outings give the weekday
@@ -57,8 +60,8 @@ export function generateDemo({ today, now, names, profileName = '', newId }) {
   const start = addDays(today, -DEMO_DAYS);
   const data = emptyData(profileName, start);
   data.demo = true;
-  // She aims high at 15%, which her current habits can't quite carry: the coach has something to explain.
-  data.settings.savePercent = 15;
+  // Example data is for exploring, so it skips the guided setup.
+  data.setup = { done: true, step: 'summary' };
   // Rent falls inside the 3-day notice period so a release request shows the rent warning.
   data.bills = [
     { id: id(), name: names.rent, amount: 120_000, frequency: 'monthly', dueDay: dayOf(addDays(today, 3)), amountType: 'fixed', kind: 'essential', lastPaidDue: null },
@@ -70,12 +73,15 @@ export function generateDemo({ today, now, names, profileName = '', newId }) {
   ];
   const incomes = new Map(INCOMES.map(([offset, amount, category]) => [addDays(today, offset), { amount, category }]));
 
+  // Her safety net exists from the start; month-end sweeps fill it as the weeks go by.
+  data.goals.push({ id: id(), name: names.emergency, target: EMERGENCY_STARTER, kind: 'emergency' });
   for (let d = start; d <= today; d = addDays(d, 1)) {
+    applySweeps(data, d, { emergencyName: names.emergency, newId: id });
     const income = incomes.get(d);
     if (income) {
       const incomeId = id();
       data.transactions.push({ id: incomeId, type: 'in', amount: income.amount, category: income.category, note: '', date: d });
-      applyAllocation(data, allocate(data, income.amount, d, incomeId), d, names.emergency, id);
+      applyAllocation(data, allocate(data, income.amount, d, incomeId), d, id);
     }
     for (const bill of [...data.bills]) {
       if (bill.frequency === 'once' || billNextDue(bill, d) !== d) continue;
@@ -93,35 +99,58 @@ export function generateDemo({ today, now, names, profileName = '', newId }) {
     }
   }
 
-  weekendTrip(data, today, id);
-
   // She has set aside everything due before her next income, then asked for a little back.
   const release = 5_000;
   const s = summarize(data, today);
-  const topUp = Math.min(s.unfunded + release, Math.max(0, s.free));
+  const topUp = Math.min(s.unfundedEssential + s.unfundedWant + release, Math.max(0, s.free));
   if (topUp > 0) setAside(data, topUp, today, id);
+  safetyNetFrom(data, today, names.savings, id);
+  thisMonthEarmark(data, today, id);
   addHoliday(data, today, names.holiday, id);
+  savingMoreThisMonth(data, today, id);
   if (!checkRelease(data, release)) requestRelease(data, release, names.releaseReason, now - DAY_MS, id);
   return data;
 }
 
 /**
- * A weekend outing in the last fortnight, sized so this month's habits leave no room for the
- * emergency fund: the coach then has a real warning to explain. Skipped if it can't be afforded.
+ * Savings from a holiday job months ago, so her safety net covers about 1.5 months of essentials.
+ * Cash-neutral (in, then saved) and dated well outside the 90 days used for careful income, so it
+ * doesn't look like recent pay.
  */
-function weekendTrip(data, today, id) {
-  const c = monthlyCapacity(data, today);
-  const em = data.goals.find((g) => g.kind === 'emergency');
-  const share = Math.min(em ? em.target - goalSaved(data.transactions, em.id) : Infinity, Math.floor((c.income * data.settings.savePercent) / 100));
-  const room = c.income - c.essentials - c.spending;
-  if (share <= 0 || room < share) return;
-  // Spending over 14 days counts about 30/14 times towards a month.
-  const amount = Math.ceil(((room - share + 1_000) * 14) / 30 / 1_000) * 1_000;
+function safetyNetFrom(data, today, note, id) {
+  const fund = data.goals.find((g) => g.kind === 'emergency');
+  const date = addDays(today, -200);
+  const income = { id: id(), type: 'in', amount: 1, category: 'otherIn', note, date };
+  const saved = { id: id(), type: 'save', amount: 1, goalId: fund.id, category: 'save', note: '', date };
+  data.transactions.push(income, saved);
+  // Essentials are averaged over the history there is, which this older entry lengthens.
+  const want = Math.round(monthlyEssentials(data, today).total * 1.5) - goalSaved(data.transactions, fund.id) + 1;
+  income.amount = Math.max(1, want);
+  saved.amount = Math.max(1, want);
+}
+
+/** Saving set aside this month and waiting for month-end, even if no income has come in yet. */
+function thisMonthEarmark(data, today, id) {
+  const month = monthOf(today);
+  if (data.earmarks.some((e) => e.month === month)) return;
   const s = summarize(data, today);
-  if (amount > s.free - s.unfunded) return;
-  let day = addDays(today, -1);
-  while (weekdayOf(day) !== 6) day = addDays(day, -1);
-  data.transactions.push({ id: id(), type: 'out', amount, category: 'outings', note: '', date: day });
+  const amount = Math.min(15_000, Math.floor(Math.max(0, s.free - s.unfunded) / 3 / 1_000) * 1_000);
+  if (amount > 0) data.earmarks.push({ id: id(), month, kind: 'emergency', amount, incomeId: null });
+}
+
+/**
+ * She set a little more aside for saving this month, so judges see a spending notice: unless
+ * month-end is close (which has its own notice), what's left now won't last until payday at her
+ * usual pace. Her spending isn't changed, so her goal stays a stretch rather than out of reach.
+ */
+function savingMoreThisMonth(data, today, id) {
+  const shown = spendingNotices(data, today)?.id;
+  if (shown === 'monthEndSoon' || shown === 'protectSaving') return;
+  const s = summarize(data, today);
+  const days = Math.max(1, Math.min(daysBetween(today, lastDayOf(monthOf(today))), daysBetween(today, s.next.date)));
+  const needed = spendingPace(data.transactions, today).perDay * days;
+  const extra = Math.ceil((s.free - needed + 1_000) / 1_000) * 1_000;
+  if (extra > 0 && extra < s.free) data.earmarks.push({ id: id(), month: monthOf(today), kind: 'emergency', amount: extra, incomeId: null });
 }
 
 /**

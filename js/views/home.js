@@ -1,5 +1,5 @@
-import { summarize } from '../core/budget.js';
-import { assessMoney } from '../core/coach.js';
+import { monthOf, summarize } from '../core/budget.js';
+import { assessMoney, spendingNotices } from '../core/coach.js';
 import { addDays, dayOfYear, todayISO } from '../core/dates.js';
 import { runOutForecast, spendingPace, weekdayInsight } from '../core/forecast.js';
 import { NUDGE_SNOOZE_DAYS, patternMismatch } from '../core/income.js';
@@ -8,7 +8,7 @@ import { h } from '../dom.js';
 import { icon } from '../icons.js';
 import { list, t } from '../i18n.js';
 import { loadExample } from './example.js';
-import { actionText, bucketBar, card, daysText, fmtDate, heading, money, pageTitle, sortTx, txList, weekdayName } from './ui.js';
+import { actionText, bucketBar, noticeCard, card, daysText, fmtDate, heading, money, pageTitle, sortTx, txList, weekdayName } from './ui.js';
 
 const SOURCE_NOTE = { estimate: 'home.estimated', late: 'home.late', default: 'home.guess', payday: 'home.payday' };
 
@@ -34,12 +34,15 @@ export function render(ctx) {
       sourceNote && h('p', { class: 'hero-note', text: t(sourceNote) })),
 
     !empty && peaceCard(assessMoney(d, today).peace),
+    !empty && noticeOf(ctx, today),
+    sweepCard(d, today),
 
     h('div', { class: 'quick' },
       h('a', { class: 'btn', href: '#/money/in' }, t('home.addIn')),
       h('a', { class: 'btn secondary', href: '#/money/out' }, t('home.addOut'))),
 
-    empty && !d.demo && exampleCard(ctx),
+    // After setup with bills or goals, the next step is the first income; otherwise offer the example.
+    empty && !d.demo && (d.bills.length || d.goals.length ? firstIncomeCard() : exampleCard(ctx)),
 
     !empty && bucketsCard(s),
     !empty && forecastCard(d, s, today),
@@ -69,6 +72,29 @@ function scamWeekCard(today) {
     h('a', { class: 'link', href: '#/scams' }, t('home.scamCheck')));
 }
 
+function noticeOf(ctx, today) {
+  const n = spendingNotices(ctx.data, today);
+  return n && noticeCard(ctx, n);
+}
+
+/** What last month's month-end moved, shown for the rest of this month. */
+function sweepCard(d, today) {
+  const [y, m] = monthOf(today).split('-').map(Number);
+  const lastMonth = monthOf(`${m === 1 ? y - 1 : y}-${String(m === 1 ? 12 : m - 1).padStart(2, '0')}-01`);
+  const w = d.sweeps.find((x) => x.month === lastMonth);
+  if (!w) return null;
+  const names = new Map(d.goals.map((g) => [g.id, g.name]));
+  const goals = w.goals.filter((g) => g.amount > 0);
+  const lines = [
+    w.emergency > 0 && t('sweep.emergency', { amount: money(w.emergency) }),
+    ...goals.map((g) => t('sweep.goal', { amount: money(g.amount), goal: names.get(g.goalId) ?? t('tx.closedGoal') })),
+    w.emergencyShort > 0 && t('sweep.short', { earmarked: money(w.emergency + w.emergencyShort), short: money(w.emergencyShort) }),
+  ].filter(Boolean);
+  return h('section', { class: 'card', 'aria-labelledby': 'sweep-h' },
+    heading('h2', ['calendar', t('sweep.title')], { id: 'sweep-h' }),
+    h('p', { text: lines.length ? lines.join(' ') : t('sweep.none') }));
+}
+
 const PEACE = { calm: ['ok', 'shieldCheck'], watch: ['warn', 'alert'], act: ['danger', 'stop'] };
 
 /** One sentence on whether needs are safe until the next income, and at most two things to do. */
@@ -76,20 +102,35 @@ function peaceCard(p) {
   const [cls, iconName] = PEACE[p.status];
   const next = fmtDate(p.next);
   const message = {
-    calm: () => t('coach.calm', { date: next }),
-    watch: () => t('coach.watch', { runOut: fmtDate(p.runOut), date: next }),
-    act: () => t('coach.act', { amount: money(p.short), bill: p.bill.name, due: fmtDate(p.bill.due) }),
+    calm: () => [
+      t('coach.calm'),
+      p.earmarked > 0 && t('coach.calmEarmark', { amount: money(p.earmarked) }),
+      p.monthsCovered !== null && p.monthsCovered !== undefined && t('coach.calmMonths', { n: p.monthsCovered }),
+    ].filter(Boolean).join(' '),
+    watch: () => (p.reason === 'earmarkUsed'
+      ? t('coach.watchEarmark', { amount: money(p.amount) })
+      : t('coach.watch', { amount: money(p.amount), date: fmtDate(p.horizon) })),
+    act: () => (p.reason === 'notSetAside'
+      ? t('coach.actSetAside', { amount: money(p.short), bill: p.bill.name, due: fmtDate(p.bill.due) })
+      : t('coach.act', { amount: money(p.short), bill: p.bill.name, due: fmtDate(p.bill.due) })),
   }[p.status]();
   const e = p.evidence;
   return h('section', { class: `card peace ${cls}`, 'aria-labelledby': 'peace-h' },
     h('h2', { id: 'peace-h', class: 'with-icon' }, icon(iconName, { cls }), t('coach.title')),
     h('p', { class: 'big-fact', text: message }),
     p.actions.length > 0 && h('ul', { class: 'bullets' }, p.actions.map((a) => h('li', { text: actionText(a, p.next) }))),
-    p.status === 'act' && !p.plan.covered && h('p', { class: 'hint', text: t('coach.actNotCovered', { due: fmtDate(p.bill.due) }) }),
+    p.status === 'act' && p.plan && !p.plan.covered && h('p', { class: 'hint', text: t('coach.actNotCovered', { due: fmtDate(p.bill.due) }) }),
     p.actions.some((a) => a.kind === 'setAside') && h('a', { class: 'link', href: '#/save' }, t('bucket.manage')),
     h('details', {},
       h('summary', { text: t('forecast.how') }),
       h('p', { text: t('coach.numbers', { cash: money(e.cash), bills: money(e.bills), date: next, free: money(e.free), pace: money(e.pace) }) })));
+}
+
+function firstIncomeCard() {
+  return h('section', { class: 'card highlight' },
+    h('h2', { text: t('setup.firstIncome.title') }),
+    h('p', { text: t('setup.firstIncome.body') }),
+    h('a', { class: 'btn', href: '#/money/in' }, t('home.addIn')));
 }
 
 function exampleCard(ctx) {

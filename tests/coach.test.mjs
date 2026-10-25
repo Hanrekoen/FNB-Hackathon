@@ -13,11 +13,11 @@ const tx = (type, amount, date, extra = {}) => ({ id: `t${++n}`, type, amount, d
 
 /**
  * R1 000 every Tuesday since 1 Sep (careful income R4 000/month, next income Tue 27 Oct), rent
- * R1 500 due on the 26th, and R420 spent in the last fortnight (R900/month): takeaway R200,
- * outings R100, groceries R95, clothing R25. Cash on hand R7 580. Most the cuts can find in a
- * month: takeaway R100 + outings R50 + clothing R10.
+ * R1 500 due on the 26th and already set aside in Needs (as after tapping Apply), and R420 spent
+ * in the last fortnight (R900/month): takeaway R200, outings R100, groceries R95, clothing R25.
+ * Cash on hand R7 580. Most the cuts can find in a month: takeaway R100 + outings R50 + clothing R10.
  */
-function base({ savePercent = 10, income = defaultIncome() } = {}) {
+function base({ savePercent = 10, income = defaultIncome(), covered = true } = {}) {
   const d = emptyData('', '2026-09-01');
   d.settings.savePercent = savePercent;
   d.income = income;
@@ -28,6 +28,7 @@ function base({ savePercent = 10, income = defaultIncome() } = {}) {
     tx('out', 9_500, '2026-10-22', { category: 'food' }),
     tx('out', 2_500, '2026-10-21', { category: 'clothing' }),
   );
+  if (covered) d.transactions.push(tx('needs', 150_000, '2026-10-20', { category: 'needs' }));
   d.bills = [{ id: 'rent', name: 'Rent', amount: 150_000, frequency: 'monthly', dueDay: 26, amountType: 'fixed', lastPaidDue: null }];
   d.goals = [{ id: 'em', name: 'Emergency fund', target: 100_000, kind: 'emergency' }];
   return d;
@@ -39,72 +40,78 @@ function withCash(d, cash) {
   return d;
 }
 
-const setAside = (d, amount) => d.transactions.push(tx('needs', amount, TODAY, { category: 'needs' }));
 const goal = (target, by, extra = {}) => ({ id: 'g', name: 'Holiday', target, kind: 'goal', by, ...extra });
 
 describe('decision order: needs, then emergency fund, then goals', () => {
   test('nothing goes to saving while needs are uncovered', () => {
-    const d = base();
+    const d = base({ covered: false });
     d.goals.push(goal(40_000, addDays(TODAY, 28)));
     d.transactions.push(tx('in', 100_000, TODAY, { category: 'gig' }));
     const a = allocate(d, 100_000, TODAY);
     assert.equal(a.needs, 100_000);
-    assert.equal(a.safety, 0);
-    assert.deepEqual(a.goals, []);
+    assert.equal(a.earmarkEmergency, 0);
+    assert.deepEqual(a.earmarkGoals, []);
   });
 
-  test('the emergency fund is fed before goals, from what is left after needs', () => {
-    const d = base();
-    d.goals.push(goal(40_000, addDays(TODAY, 28)));
+  test('the emergency earmark comes before goal earmarks, from what is left after bills', () => {
+    const d = base({ covered: false });
+    d.goals.push(goal(400_000, addDays(TODAY, 56), { plan: { cuts: [], perContribution: 10_000, acceptedAt: 1 } }));
     d.transactions.push(tx('in', 300_000, TODAY, { category: 'gig' }));
     const a = allocate(d, 300_000, TODAY);
     assert.equal(a.needs, 150_000);
-    assert.equal(a.safety, 15_000); // 10% of the R1 500 left after needs
-    assert.equal(a.goals[0].amount, 10_000);
+    assert.equal(a.earmarkEmergency, 15_000); // 10% of the R1 500 left after bills
+    // R433,34 a month for the goal; this income is three quarters of a careful month (R4 000)
+    assert.deepEqual(a.earmarkGoals.map((g) => g.amount), [32_501]);
   });
 
-  test('while a bill is short, the coach pauses every saving recommendation', () => {
-    const coach = assessMoney(withCash(base(), 100_000), TODAY);
-    assert.equal(coach.peace.status, 'act');
+  test('while bills are not covered, the emergency fund and goals wait: needs first', () => {
+    const d = base({ covered: false });
+    d.goals.push(goal(40_000, addDays(TODAY, 28)));
+    const coach = assessMoney(d, TODAY);
     assert.equal(coach.emergency.canSave, false);
-    assert.equal(coach.emergency.reason, 'needsUncovered');
-    const withGoal = withCash(base(), 100_000);
-    withGoal.goals.push(goal(40_000, addDays(TODAY, 28)));
-    assert.ok(assessMoney(withGoal, TODAY).goals.every((g) => g.needsFirst));
+    assert.equal(coach.emergency.reason, 'needsFirst');
+    assert.ok(coach.goals.every((g) => g.needsFirst));
   });
 });
 
 describe('peace of mind', () => {
-  test('calm: needs covered and money lasts; a bill not yet set aside is a nudge, not an alarm', () => {
-    const p = assessMoney(base(), TODAY).peace;
-    assert.equal(p.status, 'calm');
-    assert.equal(p.next, '2026-10-27');
-    assert.deepEqual(p.actions, [{ kind: 'setAside', amount: 150_000 }]);
+  test('calm: bills covered for 30 days, with the earmark and months covered', () => {
     const d = base();
-    setAside(d, 150_000);
-    assert.deepEqual(assessMoney(d, TODAY).peace.actions, []);
-  });
-
-  test('watch: needs are safe, but at this pace free money runs out first', () => {
-    const d = withCash(base(), 155_000); // R50 left after rent, spending R30 a day
-    setAside(d, 150_000);
+    d.earmarks.push({ id: 'e1', month: '2026-10', kind: 'emergency', amount: 30_000, incomeId: null });
     const p = assessMoney(d, TODAY).peace;
-    assert.equal(p.status, 'watch');
-    assert.equal(p.runOut, '2026-10-25');
-    assert.equal(p.gap, 2);
-    assert.deepEqual(p.actions.map((a) => a.kind), ['keepTo', 'cutBefore']);
-    assert.equal(p.actions[0].amount, 1_666);
-    assert.equal(p.actions[1].category, 'takeaway');
+    assert.equal(p.status, 'calm');
+    assert.equal(p.earmarked, 30_000);
+    assert.deepEqual(p.actions, []);
   });
 
-  test('act: names the bill and the amount short, with cuts sized to the days left', () => {
+  test('act, not set aside: the money is there but a bill due before payday is not covered', () => {
+    const p = assessMoney(base({ covered: false }), TODAY).peace;
+    assert.deepEqual([p.status, p.reason, p.short, p.bill.name], ['act', 'notSetAside', 150_000, 'Rent']);
+    assert.deepEqual(p.actions, [{ kind: 'setAside', amount: 150_000 }]);
+  });
+
+  test('act, short: names the bill and the amount short, with cuts sized to the days left', () => {
     const p = assessMoney(withCash(base(), 100_000), TODAY).peace;
-    assert.equal(p.status, 'act');
+    assert.deepEqual([p.status, p.reason], ['act', 'short']);
     assert.equal(p.short, 50_000);
     assert.deepEqual([p.bill.name, p.bill.due], ['Rent', '2026-10-26']);
     // 3 days left: a tenth of a month's takeaway (R20), cut by at most half
     assert.deepEqual(p.plan.cuts, [{ category: 'takeaway', current: 2_000, cut: 1_000, after: 1_000 }]);
     assert.equal(p.plan.covered, false);
+  });
+
+  test('watch: essential bills later in the 30 days still need money', () => {
+    const d = base();
+    d.bills.push({ id: 'school', name: 'School fees', amount: 50_000, frequency: 'monthly', dueDay: 10, amountType: 'fixed', lastPaidDue: null });
+    const p = assessMoney(d, TODAY).peace;
+    assert.deepEqual([p.status, p.reason, p.amount, p.horizon], ['watch', 'billsAhead', 50_000, '2026-11-23']);
+  });
+
+  test('watch: spending has eaten into the month-end earmark', () => {
+    const d = withCash(base(), 160_000); // R100 above rent
+    d.earmarks.push({ id: 'e1', month: '2026-10', kind: 'emergency', amount: 30_000, incomeId: null });
+    const p = assessMoney(d, TODAY).peace;
+    assert.deepEqual([p.status, p.reason, p.amount], ['watch', 'earmarkUsed', 20_000]);
   });
 });
 
@@ -195,7 +202,6 @@ describe('cuts', () => {
 describe('consequences of money going out', () => {
   test('spending that reaches rent money names the bill and how short it would be', () => {
     const d = base();
-    setAside(d, 150_000);
     const c = spendingConsequence(d, 700_000, TODAY);
     assert.equal(c.fromBillMoney, 92_000);
     assert.deepEqual(c.affected, [{ name: 'Rent', due: '2026-10-26', planned: 150_000, short: 92_000 }]);
@@ -220,7 +226,7 @@ describe('edge cases', () => {
     const coach = assessMoney(d, TODAY);
     assert.equal(coach.history.enough, false);
     assert.equal(coach.peace.status, 'act');
-    assert.equal(coach.emergency.reason, 'needsUncovered');
+    assert.equal(coach.emergency.reason, 'needsFirst');
   });
 
   test('a deadline today or past, and a goal already reached', () => {
@@ -258,8 +264,8 @@ describe('essential bills and wants', () => {
   };
   const named = (cuts) => cuts.map((c) => [c.name ?? c.category, c.cut]);
 
-  test('wants come first and whole: the smallest one that covers the gap', () => {
-    assert.deepEqual(named(cutBack(withWants(), TODAY, 8_000).cuts), [['Showmax', 9_900]]);
+  test('wants come first, whole and largest first, stopping once the gap is covered', () => {
+    assert.deepEqual(named(cutBack(withWants(), TODAY, 8_000).cuts), [['Gym', 30_000]]);
     assert.deepEqual(named(cutBack(withWants(), TODAY, 20_000).cuts), [['Gym', 30_000]]);
     assert.deepEqual(named(cutBack(withWants(), TODAY, 35_000).cuts), [['Gym', 30_000], ['Showmax', 9_900]]);
   });
@@ -295,7 +301,6 @@ describe('essential bills and wants', () => {
 
   test('the spending check counts only essentials as short, and lists wants separately', () => {
     const d = base();
-    setAside(d, 150_000);
     d.bills.push(want('showmax', 'Showmax', 20_000, 26));
     const c = spendingConsequence(d, 600_000, TODAY); // leaves R1 580: rent covered, Showmax R120 short
     assert.deepEqual(c.affected, []);

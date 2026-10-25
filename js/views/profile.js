@@ -14,8 +14,11 @@ export function profileSummary(income) {
   return t('income.summary', { pattern: name });
 }
 
-export function render(ctx) {
-  const onboarding = ctx.flash.onboarding === true;
+/**
+ * The pay-pattern form. `after` runs once a valid choice is saved (e.g. the next setup step);
+ * `buttons` adds controls beside the submit button, such as Back or Skip.
+ */
+export function incomeForm(ctx, { submitLabel = t('action.save'), after = null, buttons = [] } = {}) {
   const income = ctx.data.income;
   const today = todayISO();
   let pattern = income.pattern;
@@ -40,11 +43,6 @@ export function render(ctx) {
   }
   sync();
 
-  const finish = () => {
-    delete ctx.flash.onboarding;
-    location.hash = '#/home';
-  };
-
   async function onSubmit(e) {
     e.preventDefault();
     const next = { ...income, pattern, payDay: null, payWeekday: null, anchorDate: null, nudgeSnoozedUntil: null };
@@ -59,19 +57,29 @@ export function render(ctx) {
       next.anchorDate = anchor.value;
     }
     await ctx.commit((d) => { d.income = next; }, t('income.saved'));
-    if (onboarding) finish();
+    if (after) after();
   }
 
+  return h('form', { class: 'card', novalidate: true, 'aria-labelledby': 'income-h', on: { submit: onSubmit } },
+    h('fieldset', { class: 'choices' }, h('legend', { id: 'income-h', text: t('income.question') }), radios),
+    variesNote,
+    dayField,
+    weekdayField,
+    anchorField,
+    err,
+    h('div', { class: 'row' }, h('button', { class: 'btn', type: 'submit' }, submitLabel), buttons));
+}
+
+export function render(ctx) {
+  const onboarding = ctx.flash.onboarding === true;
+  const finish = () => {
+    delete ctx.flash.onboarding;
+    location.hash = '#/home';
+  };
   return h('div', { class: 'stack' },
     pageTitle(t('income.title'), t('income.lead')),
-    h('form', { class: 'card', novalidate: true, 'aria-labelledby': 'income-h', on: { submit: onSubmit } },
-      h('fieldset', { class: 'choices' }, h('legend', { id: 'income-h', text: t('income.question') }), radios),
-      variesNote,
-      dayField,
-      weekdayField,
-      anchorField,
-      err,
-      h('div', { class: 'row' },
-        h('button', { class: 'btn', type: 'submit' }, t('action.save')),
-        onboarding && h('button', { class: 'btn secondary', type: 'button', on: { click: finish } }, t('income.skip')))));
+    incomeForm(ctx, {
+      after: onboarding ? finish : null,
+      buttons: [onboarding && h('button', { class: 'btn secondary', type: 'button', on: { click: finish } }, t('income.skip'))],
+    }));
 }

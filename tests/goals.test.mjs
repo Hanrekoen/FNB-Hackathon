@@ -3,7 +3,7 @@ import { describe, test } from 'node:test';
 import { CUTTABLE } from '../js/core/categories.js';
 import { addDays } from '../js/core/dates.js';
 import {
-  alternatives, contributionsLeft, datedGoalContributions, goalPlan, maxCuts, monthlyCapacity, monthlyNeed,
+  alternatives, contributionsLeft, goalPlan, maxCuts, monthlyCapacity, monthlyNeed,
   perContribution, suggestCuts,
 } from '../js/core/goals.js';
 import { cautiousMonthlyIncome, defaultIncome } from '../js/core/income.js';
@@ -96,12 +96,14 @@ describe('amounts', () => {
 
 describe('monthly capacity', () => {
   test('returns every number used', () => {
-    assert.deepEqual(monthlyCapacity(base(), TODAY), { income: 400_000, essentials: 150_000, spending: 90_000, emergency: 40_000, otherGoals: 0, available: 120_000 });
+    assert.deepEqual(monthlyCapacity(base(), TODAY), { income: 400_000, essentials: 150_000, wants: 0, spending: 90_000, emergency: 40_000, otherGoals: 0, available: 120_000 });
   });
 
   test('the emergency share stops at its target, and other dated goals count', () => {
     const d = base();
-    d.transactions.push(tx('save', 80_000, '2026-10-01', { goalId: 'em', category: 'save' }));
+    // One month of essentials: R1 500 rent + R52,78 of groceries a month, rounded up to R1 600
+    d.settings.emergencyMonths = 1;
+    d.transactions.push(tx('save', 140_000, '2026-10-01', { goalId: 'em', category: 'save' }));
     d.goals.push({ id: 'other', name: 'Shoes', target: 40_000, kind: 'goal', by: addDays(TODAY, 28) });
     const c = monthlyCapacity(d, TODAY);
     assert.equal(c.emergency, 20_000);
@@ -235,20 +237,5 @@ describe('goal status', () => {
     assert.equal(p.contributions, 4);
     assert.equal(p.perContribution, 22_500);
     assert.equal(p.monthlyNeed, 22_500);
-  });
-});
-
-describe('income split contributions', () => {
-  test('nearest deadline first; reached and past goals left out', () => {
-    const d = base();
-    d.goals.push(
-      { id: 'late', name: 'Later', target: 40_000, kind: 'goal', by: addDays(TODAY, 56) },
-      { id: 'soon', name: 'Sooner', target: 40_000, kind: 'goal', by: addDays(TODAY, 28) },
-      { id: 'gone', name: 'Gone', target: 40_000, kind: 'goal', by: '2026-01-01' },
-    );
-    assert.deepEqual(datedGoalContributions(d, TODAY), [
-      { goalId: 'soon', name: 'Sooner', amount: 10_000 },
-      { goalId: 'late', name: 'Later', amount: 5_000 },
-    ]);
   });
 });

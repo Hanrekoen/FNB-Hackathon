@@ -1,4 +1,6 @@
 import { settleReleases } from './core/buckets.js';
+import { applySweeps } from './core/sweep.js';
+import { spendingNotices } from './core/coach.js';
 import { todayISO } from './core/dates.js';
 import { formatMoney } from './core/money.js';
 import { MAX_LEN } from './core/scam.js';
@@ -10,11 +12,13 @@ import * as vault from './vault.js';
 import * as budget from './views/budget.js';
 import * as credit from './views/credit.js';
 import { onboarding, unlockScreen } from './views/gate.js';
+import { noticeCard } from './views/ui.js';
 import * as home from './views/home.js';
 import * as profile from './views/profile.js';
 import * as savings from './views/savings.js';
 import * as scams from './views/scams.js';
 import * as settings from './views/settings.js';
+import * as setup from './views/setup.js';
 
 const ROUTES = { home, money: budget, save: savings, credit, scams, settings, profile };
 const TABS = [
@@ -30,7 +34,9 @@ const toastEl = document.getElementById('toast');
 let prefs = loadPrefs();
 let lastActivity = Date.now();
 let hiddenAt = 0;
+let bannerPending = false;
 let installEvent = null;
+let updateReady = false;
 
 // ---------- shared helpers given to views ----------
 
@@ -130,11 +136,10 @@ const gateCtx = {
   confirm: confirmDialog,
   toast,
   unlocked: ({ firstRun = false } = {}) => {
+    bannerPending = true;
     lastActivity = Date.now();
-    if (firstRun) {
-      ctx.flash.onboarding = true;
-      history.replaceState(null, '', '#/profile');
-    }
+    // A new user goes straight into the guided setup, which shows until it is finished.
+    if (firstRun) history.replaceState(null, '', '#/home');
     renderShell();
   },
   restart: ctx.restart,
@@ -175,15 +180,26 @@ function renderView(isNavigation) {
   const main = document.getElementById('main');
   if (!vault.isUnlocked() || !root.querySelector('.tabbar')) return;
   settleDueReleases();
+  sweepMonthEnds();
   const r = route();
   const y = window.scrollY;
   const banner = vault.getData().demo && h('p', { class: 'demo-banner', role: 'note', text: t('demo.banner') });
-  main.replaceChildren(...[banner, ROUTES[r.name].render(ctx, r.args)].filter(Boolean));
+  // When the app opens on another tab, the day's spending notice shows once at the top (Home has its own card).
+  let notice = null;
+  if (bannerPending) {
+    bannerPending = false;
+    const n = r.name === 'home' ? null : spendingNotices(vault.getData(), todayISO());
+    notice = n && noticeCard(ctx, n, true);
+  }
+  // Until setup is finished every route shows it (the lock screen is separate).
+  const inSetup = !vault.getData().setup.done;
+  root.classList.toggle('setup-mode', inSetup);
+  main.replaceChildren(...(inSetup ? [setup.render(ctx)] : [banner, notice, ROUTES[r.name].render(ctx, r.args)].filter(Boolean)));
   for (const a of document.querySelectorAll('.tabbar a')) {
     if (a.dataset.tab === r.name) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   }
-  document.title = `${t(`nav.${r.name}`)} · Imali`;
+  document.title = inSetup ? `${t('setup.title.welcome')} · Imali` : `${t(`nav.${r.name}`)} · Imali`;
   if (isNavigation) {
     window.scrollTo(0, 0);
     main.querySelector('h1')?.focus({ preventScroll: true });
@@ -193,6 +209,14 @@ function renderView(isNavigation) {
 }
 
 /** Needs releases whose notice has ended move to free money; there are no background jobs, so check on every render. */
+/** Month-end saving moves the first time the app runs in a new month (there are no background jobs). */
+function sweepMonthEnds() {
+  const swept = applySweeps(vault.getData(), todayISO(), { emergencyName: t('save.emergencyName'), newId: () => crypto.randomUUID() });
+  if (!swept.length) return;
+  vault.save().catch(() => toast(t('err.save')));
+  toast(t('sweep.toast'));
+}
+
 function settleDueReleases() {
   const released = settleReleases(vault.getData(), Date.now(), todayISO());
   if (!released.length) return;
@@ -203,6 +227,8 @@ function settleDueReleases() {
 
 function lockApp() {
   vault.lock();
+  // A new version arrived while unlocked; locking is the safe moment to switch to it.
+  if (updateReady) return location.reload();
   ctx.flash = {};
   for (const d of document.querySelectorAll('dialog')) d.remove();
   showGate();
@@ -239,6 +265,14 @@ function registerServiceWorker() {
       if (url === './sw.js') return url;
       throw new TypeError(`Blocked script URL: ${url}`);
     },
+  });
+  // Files come from the cache, so after an update this page is still running the old code.
+  // Reload into the new version at once while locked, or at the next lock (never mid-session).
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) return;
+    if (vault.isUnlocked()) updateReady = true;
+    else location.reload();
   });
   navigator.serviceWorker.register(policy ? policy.createScriptURL('./sw.js') : './sw.js', { scope: './' }).catch(() => {});
 }

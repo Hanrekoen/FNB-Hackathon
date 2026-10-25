@@ -6,7 +6,7 @@ import { isISODate } from './dates.js';
 import { PATTERNS, defaultIncome } from './income.js';
 import { MAX_CENTS } from './money.js';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 export const SAVE_PERCENTS = [0, 5, 10, 15, 20, 25, 30];
 /** Scam checks the user chose to keep (v3): at most this many, each message cut to this length. */
 export const SCAM_LOG_MAX = 30;
@@ -17,18 +17,26 @@ const FREQUENCIES = ['monthly', 'weekly', 'once'];
 export const BILL_KINDS = ['essential', 'want'];
 const RELEASE_STATUS = ['pending', 'released', 'cancelled'];
 const SCAM_LEVELS = ['none', 'low', 'medium', 'high'];
+const EARMARK_KINDS = ['emergency', 'goal'];
+// Guided setup steps (v4), in order.
+export const SETUP_STEPS = ['welcome', 'pay', 'bills', 'safety', 'goal', 'summary'];
+const isMonth = (m) => typeof m === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(m);
 
 export function emptyData(name = '', today = null) {
   return {
     v: SCHEMA_VERSION,
     profile: { name },
-    settings: { savePercent: 10 },
+    settings: { savePercent: 10, emergencyMonths: 6 },
     income: defaultIncome(),
     transactions: [],
     bills: [],
     goals: [],
     releases: [],
     scamLog: [],
+    earmarks: [],
+    sweeps: [],
+    noticeDismissed: null,
+    setup: { done: false, step: 'welcome' },
     nextIncome: null,
     demo: false,
     createdAt: today,
@@ -122,6 +130,24 @@ function normalizeRelease(r) {
   return { id: str(r.id, 64), amount: r.amount, reason: str(r.reason, 80), requestedAt: r.requestedAt, availableAt: r.availableAt, status: r.status };
 }
 
+/** Money earmarked from an income for month-end saving (v4). */
+function normalizeEarmark(e) {
+  if (!isMonth(e.month) || !EARMARK_KINDS.includes(e.kind) || !isAmount(e.amount)) return null;
+  if (e.kind === 'goal' && !(typeof e.goalId === 'string' && e.goalId)) return null;
+  const out = { id: str(e.id, 64), month: e.month, kind: e.kind, amount: e.amount, incomeId: typeof e.incomeId === 'string' ? str(e.incomeId, 64) : null };
+  if (e.kind === 'goal') out.goalId = str(e.goalId, 64);
+  return out;
+}
+
+/** A finished month-end sweep (v4), kept so a month is never swept twice. */
+function normalizeSweep(w) {
+  if (!isMonth(w.month)) return null;
+  const cents = (n) => (isInt(n, 0, MAX_CENTS) ? n : 0);
+  const goals = list(w.goals).filter((g) => typeof g.goalId === 'string' && isInt(g.amount, 0, MAX_CENTS))
+    .map((g) => ({ goalId: str(g.goalId, 64), amount: g.amount }));
+  return { month: w.month, emergency: cents(w.emergency), emergencyShort: cents(w.emergencyShort), goals };
+}
+
 function normalizeScamCheck(c) {
   if (!SCAM_LEVELS.includes(c.level) || !isISODate(c.date) || typeof c.text !== 'string') return null;
   const matches = Array.isArray(c.matches) ? c.matches.filter((m) => typeof m === 'string').slice(0, 40).map((m) => m.slice(0, 20)) : [];
@@ -135,6 +161,8 @@ export function normalize(input, today = null) {
   const out = { ...base, ...d, v: SCHEMA_VERSION, profile: { ...base.profile, ...d?.profile }, settings: { ...base.settings, ...d?.settings } };
   out.profile.name = str(out.profile.name, 40);
   if (!SAVE_PERCENTS.includes(out.settings.savePercent)) out.settings.savePercent = 10;
+  // Months of essentials the safety net aims for (v4); 6 is the usual recommendation.
+  if (!isInt(out.settings.emergencyMonths, 1, 12)) out.settings.emergencyMonths = 6;
   out.income = normalizeIncome(d?.income);
   out.transactions = list(d?.transactions)
     .filter((t) => TX_TYPES.includes(t.type) && isAmount(t.amount) && isISODate(t.date))
@@ -143,8 +171,19 @@ export function normalize(input, today = null) {
   out.goals = list(d?.goals).filter((g) => isAmount(g.target)).map(normalizeGoal);
   out.releases = list(d?.releases).map(normalizeRelease).filter(Boolean);
   out.scamLog = list(d?.scamLog).map(normalizeScamCheck).filter(Boolean).slice(0, SCAM_LOG_MAX);
+  out.earmarks = list(d?.earmarks).map(normalizeEarmark).filter(Boolean);
+  // A spending notice dismissed for the day (v4); only its id and the day are kept.
+  const nd = d?.noticeDismissed;
+  out.noticeDismissed = nd && typeof nd.id === 'string' && /^\w{1,20}$/.test(nd.id) && isISODate(nd.date) ? { id: nd.id, date: nd.date } : null;
+  const swept = new Set();
+  out.sweeps = list(d?.sweeps).map(normalizeSweep).filter((w) => w && !swept.has(w.month) && swept.add(w.month));
   out.nextIncome = isISODate(out.nextIncome) ? out.nextIncome : null;
   out.demo = d?.demo === true;
+  // Anyone who already has money in Imali skips the guided setup; everyone else resumes where they left off.
+  const st = d?.setup;
+  out.setup = st && typeof st.done === 'boolean' && SETUP_STEPS.includes(st.step)
+    ? { done: st.done, step: st.step }
+    : { done: out.transactions.length + out.bills.length + out.goals.length > 0, step: 'welcome' };
   out.createdAt = isISODate(out.createdAt) ? out.createdAt : today;
   return out;
 }
